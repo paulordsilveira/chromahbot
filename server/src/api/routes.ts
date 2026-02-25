@@ -65,7 +65,12 @@ router.put('/config', (req, res) => {
         docsMessage = COALESCE(?, docsMessage),
         docsFiles = COALESCE(?, docsFiles),
         isAiEnabled = COALESCE(?, isAiEnabled),
-        botNumber = COALESCE(?, botNumber)
+        botNumber = COALESCE(?, botNumber),
+        businessHoursEnabled = COALESCE(?, businessHoursEnabled),
+        businessHoursStart = COALESCE(?, businessHoursStart),
+        businessHoursEnd = COALESCE(?, businessHoursEnd),
+        businessDays = COALESCE(?, businessDays),
+        outsideHoursMessage = COALESCE(?, outsideHoursMessage)
       WHERE id = 1
     `).run(
       data.welcomeMessage || null, data.welcomeImageUrl || null, data.logoImage || null,
@@ -79,7 +84,12 @@ router.put('/config', (req, res) => {
       data.docCommands || null, data.menuCommands || null,
       data.docsMessage || null, data.docsFiles || null,
       data.isAiEnabled !== undefined ? (data.isAiEnabled ? 1 : 0) : null,
-      data.botNumber || null
+      data.botNumber || null,
+      data.businessHoursEnabled !== undefined ? (data.businessHoursEnabled ? 1 : 0) : null,
+      data.businessHoursStart || null,
+      data.businessHoursEnd || null,
+      data.businessDays || null,
+      data.outsideHoursMessage || null
     );
 
     const config = db.prepare('SELECT * FROM config WHERE id = 1').get() as any;
@@ -660,5 +670,251 @@ router.delete('/commands/:id', (req, res) => {
   }
 });
 
-export default router;
+// ===================== Dashboard Metrics =====================
 
+router.get('/metrics', (_req, res) => {
+  try {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+    const totalContacts = (db.prepare('SELECT COUNT(*) as c FROM contact').get() as any).c;
+    const totalMessages = (db.prepare('SELECT COUNT(*) as c FROM message_log').get() as any).c;
+    const todayMessages = (db.prepare('SELECT COUNT(*) as c FROM message_log WHERE timestamp >= ?').get(todayStart) as any).c;
+    const weekMessages = (db.prepare('SELECT COUNT(*) as c FROM message_log WHERE timestamp >= ?').get(weekStart) as any).c;
+    const todayLeads = (db.prepare("SELECT COUNT(*) as c FROM lead_ticket WHERE notifiedAt >= ?").get(todayStart) as any).c;
+    const weekLeads = (db.prepare("SELECT COUNT(*) as c FROM lead_ticket WHERE notifiedAt >= ?").get(weekStart) as any).c;
+    const totalForms = (db.prepare('SELECT COUNT(*) as c FROM form').get() as any).c;
+
+    // Messages per day (last 7 days)
+    const dailyMessages = db.prepare(`
+      SELECT DATE(timestamp) as day, COUNT(*) as count, role 
+      FROM message_log WHERE timestamp >= ? GROUP BY day, role ORDER BY day ASC
+    `).all(weekStart) as any[];
+
+    // Popular categories (top 5 by items viewed)
+    const topCategories = db.prepare(`
+      SELECT c.name, c.emoji, COUNT(ml.id) as mentions
+      FROM category c
+      LEFT JOIN message_log ml ON ml.content LIKE '%' || c.name || '%' AND ml.role = 'assistant'
+      GROUP BY c.id ORDER BY mentions DESC LIMIT 5
+    `).all() as any[];
+
+    // Forms by type
+    const formsByType = db.prepare(`
+      SELECT type, COUNT(*) as count FROM form GROUP BY type ORDER BY count DESC
+    `).all();
+
+    // Active contacts today
+    const activeToday = (db.prepare(`
+      SELECT COUNT(DISTINCT contactId) as c FROM message_log WHERE timestamp >= ?
+    `).get(todayStart) as any).c;
+
+    // AI vs URA usage
+    const config = db.prepare('SELECT isAiEnabled FROM config WHERE id = 1').get() as any;
+
+    res.json({
+      totalContacts, totalMessages, todayMessages, weekMessages,
+      todayLeads, weekLeads, totalForms, activeToday,
+      isAiEnabled: config?.isAiEnabled !== 0,
+      dailyMessages, topCategories, formsByType,
+    });
+  } catch (err) {
+    console.error('GET /metrics error:', err);
+    res.status(500).json({ error: 'Failed to fetch metrics' });
+  }
+});
+
+// ===================== Tags =====================
+
+router.get('/tags', (_req, res) => {
+  try {
+    const tags = db.prepare('SELECT * FROM tag ORDER BY name ASC').all();
+    res.json(tags);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/tags', (req, res) => {
+  try {
+    const { name, color } = req.body;
+    if (!name) return res.status(400).json({ error: 'Nome obrigatório' });
+    const result = db.prepare('INSERT INTO tag (name, color) VALUES (?, ?)').run(name, color || '#00bcd4');
+    res.json({ id: result.lastInsertRowid, name, color: color || '#00bcd4' });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/tags/:id', (req, res) => {
+  try {
+    const { name, color } = req.body;
+    db.prepare('UPDATE tag SET name = ?, color = ? WHERE id = ?').run(name, color, Number(req.params.id));
+    res.json({ ok: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/tags/:id', (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    db.prepare('DELETE FROM contact_tag WHERE tagId = ?').run(id);
+    db.prepare('DELETE FROM tag WHERE id = ?').run(id);
+    res.json({ ok: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Contact tags
+router.get('/contacts/:contactId/tags', (req, res) => {
+  try {
+    const tags = db.prepare(`
+      SELECT t.* FROM tag t JOIN contact_tag ct ON ct.tagId = t.id WHERE ct.contactId = ?
+    `).all(Number(req.params.contactId));
+    res.json(tags);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/contacts/:contactId/tags/:tagId', (req, res) => {
+  try {
+    db.prepare('INSERT OR IGNORE INTO contact_tag (contactId, tagId) VALUES (?, ?)').run(Number(req.params.contactId), Number(req.params.tagId));
+    res.json({ ok: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/contacts/:contactId/tags/:tagId', (req, res) => {
+  try {
+    db.prepare('DELETE FROM contact_tag WHERE contactId = ? AND tagId = ?').run(Number(req.params.contactId), Number(req.params.tagId));
+    res.json({ ok: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// ===================== Quick Replies (Templates) =====================
+
+router.get('/quick-replies', (_req, res) => {
+  try {
+    const replies = db.prepare('SELECT * FROM quick_reply ORDER BY shortcut ASC').all();
+    res.json(replies);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/quick-replies', (req, res) => {
+  try {
+    const { shortcut, title, content, category } = req.body;
+    if (!shortcut || !title || !content) return res.status(400).json({ error: 'shortcut, title e content são obrigatórios' });
+    const result = db.prepare('INSERT INTO quick_reply (shortcut, title, content, category) VALUES (?, ?, ?, ?)').run(shortcut, title, content, category || 'geral');
+    res.json({ id: result.lastInsertRowid, shortcut, title, content, category: category || 'geral' });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/quick-replies/:id', (req, res) => {
+  try {
+    const { shortcut, title, content, category } = req.body;
+    db.prepare('UPDATE quick_reply SET shortcut = ?, title = ?, content = ?, category = ? WHERE id = ?').run(shortcut, title, content, category || 'geral', Number(req.params.id));
+    res.json({ ok: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/quick-replies/:id', (req, res) => {
+  try {
+    db.prepare('DELETE FROM quick_reply WHERE id = ?').run(Number(req.params.id));
+    res.json({ ok: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// ===================== Scheduled Messages =====================
+
+router.get('/scheduled-messages', (_req, res) => {
+  try {
+    const messages = db.prepare(`
+      SELECT sm.*, c.name as contactName, c.phone as contactPhone 
+      FROM scheduled_message sm 
+      LEFT JOIN contact c ON sm.contactId = c.id 
+      ORDER BY sm.scheduledAt ASC
+    `).all();
+    res.json(messages);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/scheduled-messages', (req, res) => {
+  try {
+    const { contactId, targetJid, message, scheduledAt, isBroadcast, broadcastTagId } = req.body;
+    if (!message || !scheduledAt) return res.status(400).json({ error: 'message e scheduledAt são obrigatórios' });
+    const result = db.prepare(`
+      INSERT INTO scheduled_message (contactId, targetJid, message, scheduledAt, isBroadcast, broadcastTagId) VALUES (?, ?, ?, ?, ?, ?)
+    `).run(contactId || null, targetJid || null, message, scheduledAt, isBroadcast ? 1 : 0, broadcastTagId || null);
+    res.json({ id: result.lastInsertRowid });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/scheduled-messages/:id', (req, res) => {
+  try {
+    db.prepare('DELETE FROM scheduled_message WHERE id = ?').run(Number(req.params.id));
+    res.json({ ok: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// ===================== AI Training Mode =====================
+
+router.post('/ai-test', async (req, res) => {
+  try {
+    const { message } = req.body;
+    if (!message) return res.status(400).json({ error: 'message é obrigatório' });
+
+    const response = await aiService.getAiResponse(message);
+    res.json({ response });
+  } catch (err: any) {
+    console.error('POST /ai-test error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ===================== Export Data =====================
+
+router.get('/export/:type', (req, res) => {
+  try {
+    const { type } = req.params;
+    const format = (req.query.format as string) || 'json';
+    let data: any[] = [];
+    let filename = '';
+
+    switch (type) {
+      case 'contacts':
+        data = db.prepare('SELECT id, name, phone, statusAtual, observacao, createdAt, updatedAt FROM contact ORDER BY name ASC').all() as any[];
+        filename = 'contatos';
+        break;
+      case 'messages':
+        data = db.prepare(`
+          SELECT ml.id, c.name as contactName, c.phone, ml.content, ml.role, ml.timestamp
+          FROM message_log ml JOIN contact c ON ml.contactId = c.id ORDER BY ml.timestamp DESC LIMIT 1000
+        `).all() as any[];
+        filename = 'mensagens';
+        break;
+      case 'forms':
+        data = db.prepare('SELECT * FROM form ORDER BY createdAt DESC').all() as any[];
+        filename = 'formularios';
+        break;
+      case 'leads':
+        data = db.prepare(`
+          SELECT lt.*, c.name, c.phone FROM lead_ticket lt JOIN contact c ON lt.contactId = c.id ORDER BY lt.notifiedAt DESC
+        `).all() as any[];
+        filename = 'leads';
+        break;
+      default:
+        return res.status(400).json({ error: 'Tipo inválido. Use: contacts, messages, forms, leads' });
+    }
+
+    if (format === 'csv') {
+      if (data.length === 0) return res.status(200).send('');
+      const headers = Object.keys(data[0]).join(',');
+      const rows = data.map(row => Object.values(row).map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','));
+      const csv = [headers, ...rows].join('\n');
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename=${filename}_${new Date().toISOString().split('T')[0]}.csv`);
+      return res.send('\uFEFF' + csv); // BOM for Excel UTF-8
+    }
+
+    res.json(data);
+  } catch (err: any) {
+    console.error('GET /export error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+export default router;

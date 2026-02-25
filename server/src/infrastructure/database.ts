@@ -163,6 +163,61 @@ addColumnIfNotExists('custom_command', 'linkedSubcategoryId', 'INTEGER');
 addColumnIfNotExists('custom_command', 'linkedItemId', 'INTEGER');
 db.prepare("UPDATE custom_command SET createdAt = datetime('now', 'localtime') WHERE createdAt IS NULL").run();
 
+// ─── Tags system ───
+db.exec(`
+  CREATE TABLE IF NOT EXISTS tag (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    color TEXT DEFAULT '#00bcd4',
+    createdAt TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS contact_tag (
+    contactId INTEGER NOT NULL,
+    tagId INTEGER NOT NULL,
+    PRIMARY KEY (contactId, tagId),
+    FOREIGN KEY (contactId) REFERENCES contact(id),
+    FOREIGN KEY (tagId) REFERENCES tag(id)
+  );
+`);
+
+// ─── Scheduled Messages ───
+db.exec(`
+  CREATE TABLE IF NOT EXISTS scheduled_message (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contactId INTEGER,
+    targetJid TEXT,
+    message TEXT NOT NULL,
+    scheduledAt TEXT NOT NULL,
+    sentAt TEXT,
+    status TEXT DEFAULT 'pending',
+    isBroadcast INTEGER DEFAULT 0,
+    broadcastTagId INTEGER,
+    createdAt TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (contactId) REFERENCES contact(id),
+    FOREIGN KEY (broadcastTagId) REFERENCES tag(id)
+  );
+`);
+
+// ─── Quick Replies (Templates) ───
+db.exec(`
+  CREATE TABLE IF NOT EXISTS quick_reply (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    shortcut TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    category TEXT DEFAULT 'geral',
+    createdAt TEXT DEFAULT (datetime('now'))
+  );
+`);
+
+// ─── Business Hours ───
+addColumnIfNotExists('config', 'businessHoursEnabled', 'INTEGER DEFAULT 0');
+addColumnIfNotExists('config', 'businessHoursStart', "TEXT DEFAULT '09:00'");
+addColumnIfNotExists('config', 'businessHoursEnd', "TEXT DEFAULT '18:00'");
+addColumnIfNotExists('config', 'businessDays', "TEXT DEFAULT '1,2,3,4,5'");
+addColumnIfNotExists('config', 'outsideHoursMessage', "TEXT DEFAULT 'Obrigado pelo contato! Nosso horário de atendimento é de segunda a sexta, das 09:00 às 18:00. Sua mensagem será respondida no próximo dia útil.'");
+
 const existingConfig = db.prepare('SELECT id FROM config WHERE id = 1').get();
 if (!existingConfig) {
   db.prepare(`INSERT INTO config (id, welcomeMessage, activeAiProvider) VALUES (1, 'Olá! Seja bem-vindo à ChromaH — soluções digitais conscientes. Como posso ajudar?', 'gemini')`).run();

@@ -10,6 +10,9 @@ import { Commands } from './pages/Commands';
 import { Leads } from './pages/Leads';
 import { Forms } from './pages/Forms';
 import { CRM } from './pages/CRM';
+import { QuickReplies } from './pages/QuickReplies';
+import { AiTraining } from './pages/AiTraining';
+import { ScheduledMessages } from './pages/ScheduledMessages';
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -31,6 +34,9 @@ function App() {
                   <Route path="/configuracoes" element={<Settings />} />
                   <Route path="/leads" element={<Leads />} />
                   <Route path="/formularios" element={<Forms />} />
+                  <Route path="/respostas-rapidas" element={<QuickReplies />} />
+                  <Route path="/treinamento-ia" element={<AiTraining />} />
+                  <Route path="/agendamento" element={<ScheduledMessages />} />
                 </Routes>
               </main>
             </div>

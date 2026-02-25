@@ -1,6 +1,9 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, List, Settings, MessageSquare, FileText, Menu, X, Briefcase, Zap } from 'lucide-react';
+import { LayoutDashboard, List, Settings, MessageSquare, FileText, Menu, X, Briefcase, Zap, Brain, Calendar, Send } from 'lucide-react';
+import axios from 'axios';
+
+const API_URL = 'http://localhost:3020/api';
 
 interface SidebarProps {
     isOpen: boolean;
@@ -8,13 +11,24 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
+    const [isAiEnabled, setIsAiEnabled] = useState(true);
+
+    useEffect(() => {
+        axios.get(`${API_URL}/config`).then(({ data }) => {
+            setIsAiEnabled(data?.isAiEnabled !== 0);
+        }).catch(() => { });
+    }, []);
+
     const navItems = [
-        { path: '/', icon: LayoutDashboard, label: 'Conexão WPP' },
+        { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
         { path: '/categorias', icon: List, label: 'Categorias' },
         { path: '/crm', icon: Briefcase, label: 'CRM' },
         { path: '/formularios', icon: FileText, label: 'Formulários' },
         { path: '/leads', icon: MessageSquare, label: 'WhatsApp' },
         { path: '/comandos', icon: Zap, label: 'Comandos' },
+        { path: '/respostas-rapidas', icon: Send, label: 'Respostas Rápidas' },
+        { path: '/agendamento', icon: Calendar, label: 'Agendamento' },
+        { path: '/treinamento-ia', icon: Brain, label: 'Treinar IA' },
         { path: '/configuracoes', icon: Settings, label: 'Configurações' },
     ];
 
@@ -77,8 +91,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                     </ul>
                 </nav>
 
-                <div className="p-3 lg:p-4 border-t border-ch-border text-xs text-ch-muted text-center">
-                    ChromaH Bot v1.0
+                <div className="p-3 lg:p-4 border-t border-ch-border text-center">
+                    <p className="text-xs text-ch-muted">ChromaH Bot v2.0</p>
+                    <span className={`inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${isAiEnabled ? 'bg-ch-cyan/15 text-ch-cyan' : 'bg-ch-magenta/15 text-ch-magenta'}`}>
+                        {isAiEnabled ? '🧠 IA Ativa' : '📋 Modo URA'}
+                    </span>
                 </div>
             </div>
         </>
@@ -99,7 +116,7 @@ export const MobileHeader: React.FC<{ onMenuClick: () => void }> = ({ onMenuClic
                     <Zap className="text-ch-cyan" size={20} />
                     <span className="bg-gradient-to-r from-ch-cyan to-ch-purple bg-clip-text text-transparent">ChromaH</span>
                 </h1>
-                <div className="w-10" /> {/* Spacer for center alignment */}
+                <div className="w-10" />
             </div>
         </header>
     );
