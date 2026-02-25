@@ -161,7 +161,7 @@ export const Categories: React.FC = () => {
         try {
             setError(null);
             const { data } = await axios.post(`${API_URL}/categories`, { name, order: Number.isFinite(order) ? order : 0 });
-            setCategories(prev => [...prev, data].sort((a, b) => a.order - b.order));
+            setCategories(prev => [...prev, { ...data, subcategories: data.subcategories || [] }].sort((a, b) => a.order - b.order));
         } catch (e) {
             setError('Falha ao criar categoria.');
         }
@@ -308,25 +308,25 @@ export const Categories: React.FC = () => {
     return (
         <div className="p-4 md:p-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 md:mb-6">
-                <h1 className="text-2xl md:text-3xl font-bold dark:text-white">Gerenciar Categorias</h1>
-                <button onClick={handleCreateCategory} className="bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-blue-700 w-full sm:w-auto justify-center">
+                <h1 className="text-2xl md:text-3xl font-bold text-ch-text">Gerenciar Categorias</h1>
+                <button onClick={handleCreateCategory} className="bg-ch-cyan text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-ch-cyan/80 w-full sm:w-auto justify-center">
                     <Plus size={20} /> <span>Nova Categoria</span>
                 </button>
             </div>
 
             {error && (
-                <div className="mb-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 p-3 rounded">{error}</div>
+                <div className="mb-4 bg-ch-magenta/10 bg-ch-magenta/10 border border-ch-magenta/30 border-ch-magenta/30 text-ch-magenta text-ch-magenta p-3 rounded">{error}</div>
             )}
 
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
+            <div className="glass rounded-xl shadow-lg overflow-hidden">
                 {loading ? (
-                    <div className="p-6 dark:text-gray-300">Carregando...</div>
+                    <div className="p-6 text-ch-text">Carregando...</div>
                 ) : (
-                    categories.map((category: Category) => (
-                        <div key={category.id} className="border-b border-gray-100 dark:border-gray-700 last:border-0">
-                            <div className="flex items-center justify-between p-3 md:p-4 bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                    categories.map((category: Category, idx: number) => (
+                        <div key={category.id} className="border-b border-gray-100 border-ch-border last:border-0">
+                            <div className="flex items-center justify-between p-3 md:p-4 bg-ch-bg hover:bg-ch-surface-2 hover:bg-ch-surface-2 transition-colors">
                                 <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
-                                    <button onClick={() => toggleExpand(category.id)} className="text-gray-500">
+                                    <button onClick={() => toggleExpand(category.id)} className="text-ch-muted">
                                         {expanded.includes(category.id) ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
                                     </button>
                                     {editingCat?.id === category.id ? (
@@ -341,17 +341,17 @@ export const Categories: React.FC = () => {
                                                     maxLength={2}
                                                 />
                                                 <button type="button" onClick={() => setShowCatEmojiPicker(!showCatEmojiPicker)}
-                                                    className="px-1 border rounded hover:bg-gray-100" title="Escolher emoji">
-                                                    <Smile size={16} className="text-gray-500" />
+                                                    className="px-1 border rounded hover:bg-ch-surface-2" title="Escolher emoji">
+                                                    <Smile size={16} className="text-ch-muted" />
                                                 </button>
                                             </div>
                                             {showCatEmojiPicker && (
-                                                <div className="absolute top-full left-0 mt-1 bg-white border rounded-lg shadow-lg p-2 z-50 w-64">
+                                                <div className="absolute top-full left-0 mt-1 bg-ch-surface border rounded-xl shadow-lg p-2 z-50 w-64">
                                                     <div className="grid grid-cols-8 gap-1 max-h-48 overflow-y-auto">
                                                         {WHATSAPP_EMOJIS.map((emoji, idx) => (
                                                             <button key={idx} type="button"
                                                                 onClick={() => { setEditingCat(prev => prev ? { ...prev, emoji } : prev); setShowCatEmojiPicker(false); }}
-                                                                className="w-7 h-7 text-lg hover:bg-gray-100 rounded flex items-center justify-center">
+                                                                className="w-7 h-7 text-lg hover:bg-ch-surface-2 rounded flex items-center justify-center">
                                                                 {emoji}
                                                             </button>
                                                         ))}
@@ -366,76 +366,76 @@ export const Categories: React.FC = () => {
                                             />
                                         </div>
                                     ) : (
-                                        <span className="font-semibold text-base md:text-lg dark:text-white truncate">{category.order}. {category.emoji && `${category.emoji} `}{category.name}</span>
+                                        <span className="font-semibold text-base md:text-lg text-ch-text truncate">{idx + 1}. {category.emoji && `${category.emoji} `}{category.name}</span>
                                     )}
                                 </div>
 
                                 <div className="flex gap-1 md:gap-2 flex-shrink-0">
                                     {editingCat?.id === category.id ? (
                                         <>
-                                            <button onClick={handleSaveCategory} className="text-green-600 p-1 md:p-2"><Save size={18} /></button>
-                                            <button onClick={() => setEditingCat(null)} className="text-red-500 p-1 md:p-2"><X size={18} /></button>
+                                            <button onClick={handleSaveCategory} className="text-emerald-400 p-1 md:p-2"><Save size={18} /></button>
+                                            <button onClick={() => setEditingCat(null)} className="text-ch-magenta p-1 md:p-2"><X size={18} /></button>
                                         </>
                                     ) : (
                                         <>
-                                            <button onClick={() => setEditingCat(category)} className="text-blue-500 p-1 md:p-2 hover:bg-blue-100 dark:hover:bg-blue-900 rounded"><Edit size={18} /></button>
-                                            <button onClick={() => handleDeleteCategory(category.id)} className="text-red-500 p-1 md:p-2 hover:bg-red-100 dark:hover:bg-red-900 rounded"><Trash size={18} /></button>
+                                            <button onClick={() => setEditingCat(category)} className="text-ch-cyan p-1 md:p-2 hover:bg-ch-cyan/10 dark:hover:bg-blue-900 rounded"><Edit size={18} /></button>
+                                            <button onClick={() => handleDeleteCategory(category.id)} className="text-ch-magenta p-1 md:p-2 hover:bg-red-100 dark:hover:bg-red-900 rounded"><Trash size={18} /></button>
                                         </>
                                     )}
                                 </div>
                             </div>
 
                             {expanded.includes(category.id) && (
-                                <div className="p-3 md:p-4 pl-6 md:pl-12 bg-white dark:bg-gray-800">
+                                <div className="p-3 md:p-4 pl-6 md:pl-12 glass">
                                     <div className="mb-3 md:mb-4 flex justify-between items-center">
-                                        <h4 className="text-xs md:text-sm font-bold text-gray-500 dark:text-gray-400 uppercase">Subcategorias</h4>
-                                        <button onClick={() => openNewSubCategory(category)} className="text-xs md:text-sm text-blue-600 flex items-center gap-1 hover:underline">
+                                        <h4 className="text-xs md:text-sm font-bold text-ch-muted uppercase">Subcategorias</h4>
+                                        <button onClick={() => openNewSubCategory(category)} className="text-xs md:text-sm text-ch-cyan flex items-center gap-1 hover:underline">
                                             <Plus size={14} /> Adicionar
                                         </button>
                                     </div>
-                                    {category.subcategories.length > 0 ? (
+                                    {(category.subcategories || []).length > 0 ? (
                                         <ul className="space-y-2">
-                                            {category.subcategories.map((sub: SubCategory) => (
-                                                <li key={sub.id} className="border dark:border-gray-700 rounded">
-                                                    <div className="flex items-center justify-between p-2 md:p-3 hover:bg-gray-50 dark:hover:bg-gray-700">
+                                            {(category.subcategories || []).map((sub: SubCategory, subIdx: number) => (
+                                                <li key={sub.id} className="border border-ch-border rounded">
+                                                    <div className="flex items-center justify-between p-2 md:p-3 hover:bg-ch-surface-2 hover:bg-ch-surface-2">
                                                         <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
-                                                            <button onClick={() => toggleSubExpand(sub.id)} className="text-gray-400 flex-shrink-0">
+                                                            <button onClick={() => toggleSubExpand(sub.id)} className="text-ch-muted flex-shrink-0">
                                                                 {expandedSubs.includes(sub.id) ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                                                             </button>
                                                             <div className="min-w-0">
-                                                                <span className="font-medium text-sm md:text-base dark:text-white">{sub.order}. {sub.emoji && `${sub.emoji} `}{sub.name}</span>
+                                                                <span className="font-medium text-sm md:text-base text-ch-text">{subIdx + 1}. {sub.emoji && `${sub.emoji} `}{sub.name}</span>
                                                                 {sub.enabledInBot === false && <span className="ml-2 text-xs text-orange-500">(oculto)</span>}
-                                                                <span className="ml-2 text-xs text-gray-400">({subItems[sub.id]?.length || 0})</span>
+                                                                <span className="ml-2 text-xs text-ch-muted">({subItems[sub.id]?.length || 0})</span>
                                                             </div>
                                                         </div>
                                                         <div className="flex gap-1 md:gap-2 flex-shrink-0">
-                                                            <button onClick={() => openNewItem(sub.id)} className="text-green-500 hover:text-green-700 p-1" title="Adicionar Item"><Package size={14} /></button>
-                                                            <button onClick={() => openEditSubCategory(category, sub)} className="text-gray-400 hover:text-blue-500 p-1"><Edit size={14} /></button>
-                                                            <button onClick={() => handleDeleteSubCategory(category.id, sub.id)} className="text-gray-400 hover:text-red-500 p-1"><Trash size={14} /></button>
+                                                            <button onClick={() => openNewItem(sub.id)} className="text-emerald-400 hover:text-green-700 p-1" title="Adicionar Item"><Package size={14} /></button>
+                                                            <button onClick={() => openEditSubCategory(category, sub)} className="text-ch-muted hover:text-ch-cyan p-1"><Edit size={14} /></button>
+                                                            <button onClick={() => handleDeleteSubCategory(category.id, sub.id)} className="text-ch-muted hover:text-ch-magenta p-1"><Trash size={14} /></button>
                                                         </div>
                                                     </div>
                                                     {expandedSubs.includes(sub.id) && (
-                                                        <div className="p-2 md:p-3 pt-0 pl-6 md:pl-10 bg-gray-50 dark:bg-gray-900 border-t dark:border-gray-700">
+                                                        <div className="p-2 md:p-3 pt-0 pl-6 md:pl-10 bg-ch-bg border-t border-ch-border">
                                                             <div className="flex justify-between items-center mb-2">
-                                                                <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Itens</span>
-                                                                <button onClick={() => openNewItem(sub.id)} className="text-xs text-green-600 hover:underline flex items-center gap-1">
+                                                                <span className="text-xs font-bold text-ch-muted uppercase">Itens</span>
+                                                                <button onClick={() => openNewItem(sub.id)} className="text-xs text-emerald-400 hover:underline flex items-center gap-1">
                                                                     <Plus size={12} /> Novo
                                                                 </button>
                                                             </div>
                                                             {subItems[sub.id]?.length > 0 ? (
                                                                 <ul className="space-y-1">
                                                                     {subItems[sub.id].map((item: Item) => (
-                                                                        <li key={item.id} className="flex items-center justify-between p-2 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded text-sm">
-                                                                            <span className="dark:text-gray-300 truncate">{item.name} {item.enabled === false && <span className="text-orange-500">(inativo)</span>}</span>
+                                                                        <li key={item.id} className="flex items-center justify-between p-2 glass border border-ch-border rounded text-sm">
+                                                                            <span className="text-ch-text truncate">{item.name} {item.enabled === false && <span className="text-orange-500">(inativo)</span>}</span>
                                                                             <div className="flex gap-1 flex-shrink-0">
-                                                                                <button onClick={() => openEditItem(sub.id, item)} className="text-gray-400 hover:text-blue-500 p-1"><Edit size={14} /></button>
-                                                                                <button onClick={() => handleDeleteItem(sub.id, item.id)} className="text-gray-400 hover:text-red-500 p-1"><Trash size={14} /></button>
+                                                                                <button onClick={() => openEditItem(sub.id, item)} className="text-ch-muted hover:text-ch-cyan p-1"><Edit size={14} /></button>
+                                                                                <button onClick={() => handleDeleteItem(sub.id, item.id)} className="text-ch-muted hover:text-ch-magenta p-1"><Trash size={14} /></button>
                                                                             </div>
                                                                         </li>
                                                                     ))}
                                                                 </ul>
                                                             ) : (
-                                                                <p className="text-gray-400 text-xs italic">Nenhum item cadastrado.</p>
+                                                                <p className="text-ch-muted text-xs italic">Nenhum item cadastrado.</p>
                                                             )}
                                                         </div>
                                                     )}
@@ -443,7 +443,7 @@ export const Categories: React.FC = () => {
                                             ))}
                                         </ul>
                                     ) : (
-                                        <p className="text-gray-400 text-sm italic">Nenhuma subcategoria cadastrada.</p>
+                                        <p className="text-ch-muted text-sm italic">Nenhuma subcategoria cadastrada.</p>
                                     )}
                                 </div>
                             )}
@@ -454,48 +454,50 @@ export const Categories: React.FC = () => {
 
             {editingSub && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 md:p-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md">
-                        <div className="p-4 md:p-6 border-b dark:border-gray-700 flex justify-between items-center">
-                            <h2 className="text-lg md:text-xl font-bold dark:text-white">{isNewSub ? 'Nova Subcategoria' : 'Editar Subcategoria'}</h2>
-                            <button onClick={() => setEditingSub(null)} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"><X size={24} /></button>
+                    <div className="glass rounded-xl shadow-xl w-full max-w-md">
+                        <div className="p-4 md:p-6 border-b border-ch-border flex justify-between items-center">
+                            <h2 className="text-lg md:text-xl font-bold text-ch-text">{isNewSub ? 'Nova Subcategoria' : 'Editar Subcategoria'}</h2>
+                            <button onClick={() => setEditingSub(null)} className="text-ch-muted hover:text-ch-text text-ch-muted dark:hover:text-gray-200"><X size={24} /></button>
                         </div>
                         <div className="p-4 md:p-6 space-y-4">
                             {isNewSub && (
-                                <div className="bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
-                                    <label className="block text-sm font-medium text-blue-700 dark:text-blue-400 mb-2">⚡ Subcategorias Especiais</label>
+                                <div className="bg-ch-cyan/10 bg-ch-cyan/10 p-3 rounded-xl border border-blue-200 dark:border-blue-800">
+                                    <label className="block text-sm font-medium text-ch-cyan text-ch-cyan mb-2">⚡ Subcategorias Especiais</label>
                                     <div className="flex flex-wrap gap-2">
-                                        <button type="button" onClick={() => { updateSubField('name', 'Simulação'); updateSubField('emoji', '📝'); }} 
-                                            className="px-2 py-1 text-xs md:text-sm bg-white dark:bg-gray-700 border border-blue-300 dark:border-blue-600 rounded hover:bg-blue-100 dark:hover:bg-blue-900 dark:text-gray-300">📝 Simulação</button>
-                                        <button type="button" onClick={() => { updateSubField('name', 'Cadastro Corretor'); updateSubField('emoji', '🤝'); }} 
-                                            className="px-2 py-1 text-xs md:text-sm bg-white dark:bg-gray-700 border border-blue-300 dark:border-blue-600 rounded hover:bg-blue-100 dark:hover:bg-blue-900 dark:text-gray-300">🤝 Corretor</button>
-                                        <button type="button" onClick={() => { updateSubField('name', 'Cadastro Locação/Venda'); updateSubField('emoji', '🏠'); }} 
-                                            className="px-2 py-1 text-xs md:text-sm bg-white dark:bg-gray-700 border border-blue-300 dark:border-blue-600 rounded hover:bg-blue-100 dark:hover:bg-blue-900 dark:text-gray-300">🏠 Locação</button>
-                                        <button type="button" onClick={() => { updateSubField('name', 'Dúvidas'); updateSubField('emoji', '❓'); }} 
-                                            className="px-2 py-1 text-xs md:text-sm bg-white dark:bg-gray-700 border border-blue-300 dark:border-blue-600 rounded hover:bg-blue-100 dark:hover:bg-blue-900 dark:text-gray-300">❓ Dúvidas</button>
-                                        <button type="button" onClick={() => { updateSubField('name', 'Consulta de Processos'); updateSubField('emoji', '🔍'); }} 
-                                            className="px-2 py-1 text-xs md:text-sm bg-white dark:bg-gray-700 border border-blue-300 dark:border-blue-600 rounded hover:bg-blue-100 dark:hover:bg-blue-900 dark:text-gray-300">🔍 Processos</button>
+                                        <button type="button" onClick={() => { updateSubField('name', 'Simulação'); updateSubField('emoji', '📝'); }}
+                                            className="px-2 py-1 text-xs md:text-sm bg-ch-surface-2 border border-ch-cyan/50 border-ch-cyan/50 rounded hover:bg-ch-cyan/10 dark:hover:bg-blue-900 text-ch-text">📝 Simulação</button>
+                                        <button type="button" onClick={() => { updateSubField('name', 'Cadastro Corretor'); updateSubField('emoji', '🤝'); }}
+                                            className="px-2 py-1 text-xs md:text-sm bg-ch-surface-2 border border-ch-cyan/50 border-ch-cyan/50 rounded hover:bg-ch-cyan/10 dark:hover:bg-blue-900 text-ch-text">🤝 Corretor</button>
+                                        <button type="button" onClick={() => { updateSubField('name', 'Cadastro Locação/Venda'); updateSubField('emoji', '🏠'); }}
+                                            className="px-2 py-1 text-xs md:text-sm bg-ch-surface-2 border border-ch-cyan/50 border-ch-cyan/50 rounded hover:bg-ch-cyan/10 dark:hover:bg-blue-900 text-ch-text">🏠 Locação</button>
+                                        <button type="button" onClick={() => { updateSubField('name', 'Dúvidas'); updateSubField('emoji', '❓'); }}
+                                            className="px-2 py-1 text-xs md:text-sm bg-ch-surface-2 border border-ch-cyan/50 border-ch-cyan/50 rounded hover:bg-ch-cyan/10 dark:hover:bg-blue-900 text-ch-text">❓ Dúvidas</button>
+                                        <button type="button" onClick={() => { updateSubField('name', 'Consulta de Processos'); updateSubField('emoji', '🔍'); }}
+                                            className="px-2 py-1 text-xs md:text-sm bg-ch-surface-2 border border-ch-cyan/50 border-ch-cyan/50 rounded hover:bg-ch-cyan/10 dark:hover:bg-blue-900 text-ch-text">🔍 Processos</button>
+                                        <button type="button" onClick={() => { updateSubField('name', 'Falar com'); updateSubField('emoji', '📞'); }}
+                                            className="px-2 py-1 text-xs md:text-sm bg-ch-surface-2 border border-ch-purple/50 rounded hover:bg-ch-purple/10 dark:hover:bg-purple-900 text-ch-text">📞 Falar com</button>
                                     </div>
-                                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">Clique para preencher ou digite abaixo.</p>
+                                    <p className="text-xs text-ch-cyan text-ch-cyan mt-2">Clique para preencher ou digite abaixo.</p>
                                 </div>
                             )}
                             <div className="grid grid-cols-4 gap-3 md:gap-4">
                                 <div className="col-span-1 relative">
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Emoji</label>
+                                    <label className="block text-sm font-medium text-ch-text text-ch-text mb-1">Emoji</label>
                                     <div className="flex gap-1">
                                         <input type="text" value={editingSub.sub.emoji || ''} onChange={e => updateSubField('emoji', e.target.value)}
-                                            className="w-full border dark:border-gray-600 rounded p-2 text-center text-xl dark:bg-gray-700 dark:text-white" placeholder="🏠" maxLength={2} />
+                                            className="w-full border border-ch-border rounded p-2 text-center text-xl bg-ch-surface-2 text-ch-text" placeholder="🏠" maxLength={2} />
                                         <button type="button" onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                                            className="px-2 border dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700" title="Escolher emoji">
-                                            <Smile size={20} className="text-gray-500" />
+                                            className="px-2 border border-ch-border rounded hover:bg-ch-surface-2 hover:bg-ch-surface-2" title="Escolher emoji">
+                                            <Smile size={20} className="text-ch-muted" />
                                         </button>
                                     </div>
                                     {showEmojiPicker && (
-                                        <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg shadow-lg p-2 z-50 w-64">
+                                        <div className="absolute top-full left-0 mt-1 glass border border-ch-border rounded-xl shadow-lg p-2 z-50 w-64">
                                             <div className="grid grid-cols-8 gap-1 max-h-48 overflow-y-auto">
                                                 {WHATSAPP_EMOJIS.map((emoji, idx) => (
                                                     <button key={idx} type="button"
                                                         onClick={() => { updateSubField('emoji', emoji); setShowEmojiPicker(false); }}
-                                                        className="w-7 h-7 text-lg hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center justify-center">
+                                                        className="w-7 h-7 text-lg hover:bg-ch-surface-2 hover:bg-ch-surface-2 rounded flex items-center justify-center">
                                                         {emoji}
                                                     </button>
                                                 ))}
@@ -504,25 +506,25 @@ export const Categories: React.FC = () => {
                                     )}
                                 </div>
                                 <div className="col-span-3">
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nome</label>
+                                    <label className="block text-sm font-medium text-ch-text text-ch-text mb-1">Nome</label>
                                     <input type="text" value={editingSub.sub.name || ''} onChange={e => updateSubField('name', e.target.value)}
-                                        className="w-full border dark:border-gray-600 rounded p-2 dark:bg-gray-700 dark:text-white" placeholder="Nome da subcategoria" />
+                                        className="w-full border border-ch-border rounded p-2 bg-ch-surface-2 text-ch-text" placeholder="Nome da subcategoria" />
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ordem</label>
+                                <label className="block text-sm font-medium text-ch-text text-ch-text mb-1">Ordem</label>
                                 <input type="number" value={editingSub.sub.order || ''} onChange={e => updateSubField('order', Number(e.target.value))}
-                                    className="w-full border dark:border-gray-600 rounded p-2 dark:bg-gray-700 dark:text-white" />
+                                    className="w-full border border-ch-border rounded p-2 bg-ch-surface-2 text-ch-text" />
                             </div>
                             <div className="flex items-center gap-2">
                                 <input type="checkbox" id="enabledInBot" checked={editingSub.sub.enabledInBot !== false}
                                     onChange={e => updateSubField('enabledInBot', e.target.checked)} className="w-4 h-4" />
-                                <label htmlFor="enabledInBot" className="text-sm font-medium text-gray-700 dark:text-gray-300">Exibir no Bot</label>
+                                <label htmlFor="enabledInBot" className="text-sm font-medium text-ch-text text-ch-text">Exibir no Bot</label>
                             </div>
                         </div>
-                        <div className="p-4 md:p-6 border-t dark:border-gray-700 flex justify-end gap-3">
-                            <button onClick={() => setEditingSub(null)} className="px-4 py-2 border dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300">Cancelar</button>
-                            <button onClick={handleSaveSubCategory} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Salvar</button>
+                        <div className="p-4 md:p-6 border-t border-ch-border flex justify-end gap-3">
+                            <button onClick={() => setEditingSub(null)} className="px-4 py-2 border border-ch-border rounded hover:bg-ch-surface-2 hover:bg-ch-surface-2 text-ch-text">Cancelar</button>
+                            <button onClick={handleSaveSubCategory} className="px-4 py-2 bg-ch-cyan text-white rounded hover:bg-ch-cyan/80">Salvar</button>
                         </div>
                     </div>
                 </div>
@@ -530,31 +532,31 @@ export const Categories: React.FC = () => {
 
             {editingItem && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 md:p-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-[95vw] md:max-w-[80vw] max-h-[90vh] overflow-y-auto">
-                        <div className="p-4 md:p-6 border-b dark:border-gray-700 flex justify-between items-center sticky top-0 bg-white dark:bg-gray-800 z-10">
-                            <h2 className="text-lg md:text-xl font-bold dark:text-white">{isNewItem ? 'Registrar Item' : 'Editar Item'}</h2>
-                            <button onClick={() => setEditingItem(null)} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"><X size={24} /></button>
+                    <div className="glass rounded-xl shadow-xl w-full max-w-[95vw] md:max-w-[80vw] max-h-[90vh] overflow-y-auto">
+                        <div className="p-4 md:p-6 border-b border-ch-border flex justify-between items-center sticky top-0 glass z-10">
+                            <h2 className="text-lg md:text-xl font-bold text-ch-text">{isNewItem ? 'Registrar Item' : 'Editar Item'}</h2>
+                            <button onClick={() => setEditingItem(null)} className="text-ch-muted hover:text-ch-text text-ch-muted dark:hover:text-gray-200"><X size={24} /></button>
                         </div>
                         <div className="p-4 md:p-6 space-y-5">
                             {/* Imagens - até 10 - UPLOAD MÚLTIPLO */}
-                            <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg border dark:border-gray-700">
-                                <label className="block text-sm font-semibold text-gray-800 dark:text-gray-100 mb-3">📷 Imagens (até 10)</label>
+                            <div className="bg-ch-bg p-4 rounded-xl border border-ch-border">
+                                <label className="block text-sm font-semibold text-ch-text dark:text-gray-100 mb-3">📷 Imagens (até 10)</label>
                                 <div className="flex flex-wrap gap-3 mb-3">
                                     {(editingItem.item.imageUrls?.split('\n').filter(Boolean) || []).slice(0, 10).map((url, idx) => (
-                                        <div key={idx} className="relative w-20 h-20 border-2 border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden bg-white dark:bg-gray-700 shadow-sm">
+                                        <div key={idx} className="relative w-20 h-20 border-2 border-ch-border rounded-xl overflow-hidden bg-ch-surface-2 shadow-sm">
                                             <img src={url} alt={`Img ${idx + 1}`} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect fill="%23eee" width="64" height="64"/><text x="50%" y="50%" fill="%23999" font-size="8" text-anchor="middle" dy=".3em">Erro</text></svg>'; }} />
-                                            <button 
+                                            <button
                                                 onClick={() => {
                                                     const urls = editingItem.item.imageUrls?.split('\n').filter(Boolean) || [];
                                                     urls.splice(idx, 1);
                                                     updateItemField('imageUrls', urls.join('\n'));
                                                 }}
-                                                className="absolute top-0 right-0 bg-red-500 text-white w-5 h-5 flex items-center justify-center text-xs rounded-bl font-bold hover:bg-red-600"
+                                                className="absolute top-0 right-0 bg-ch-magenta text-white w-5 h-5 flex items-center justify-center text-xs rounded-bl font-bold hover:bg-ch-magenta"
                                             >×</button>
                                         </div>
                                     ))}
                                     {(editingItem.item.imageUrls?.split('\n').filter(Boolean).length || 0) < 10 && (
-                                        <label className="w-20 h-20 border-2 border-dashed border-gray-400 dark:border-gray-500 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors">
+                                        <label className="w-20 h-20 border-2 border-dashed border-gray-400 dark:border-gray-500 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:bg-ch-surface-2 hover:bg-ch-surface-2 text-ch-muted transition-colors">
                                             <span className="text-2xl">+</span>
                                             <span className="text-xs">Adicionar</span>
                                             <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => {
@@ -562,7 +564,7 @@ export const Categories: React.FC = () => {
                                                 const currentUrls = editingItem.item.imageUrls?.split('\n').filter(Boolean) || [];
                                                 const remaining = 10 - currentUrls.length;
                                                 const filesToAdd = files.slice(0, remaining);
-                                                
+
                                                 filesToAdd.forEach(file => {
                                                     if (file.size > 5 * 1024 * 1024) return; // Max 5MB
                                                     const reader = new FileReader();
@@ -580,31 +582,31 @@ export const Categories: React.FC = () => {
                                         </label>
                                     )}
                                 </div>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">Selecione várias imagens de uma vez. Máx 5MB cada.</p>
+                                <p className="text-xs text-ch-muted">Selecione várias imagens de uma vez. Máx 5MB cada.</p>
                             </div>
 
                             {/* Vídeos - até 2 */}
-                            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
-                                <label className="block text-sm font-semibold text-gray-800 dark:text-gray-100 mb-3">🎬 Vídeos (até 2)</label>
+                            <div className="bg-ch-cyan/10 bg-ch-cyan/10/20 p-4 rounded-xl border border-blue-200 dark:border-blue-800">
+                                <label className="block text-sm font-semibold text-ch-text dark:text-gray-100 mb-3">🎬 Vídeos (até 2)</label>
                                 <div className="flex flex-wrap gap-3 mb-2">
                                     {(editingItem.item.videoUrls?.split('\n').filter(Boolean) || []).slice(0, 2).map((url, idx) => (
-                                        <div key={idx} className="relative w-36 h-24 border-2 border-blue-300 dark:border-blue-600 rounded-lg overflow-hidden bg-black shadow-sm">
+                                        <div key={idx} className="relative w-36 h-24 border-2 border-ch-cyan/50 border-ch-cyan/50 rounded-xl overflow-hidden bg-black shadow-sm">
                                             <video src={url} className="w-full h-full object-cover" />
                                             <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
                                                 <span className="text-white text-2xl">▶</span>
                                             </div>
-                                            <button 
+                                            <button
                                                 onClick={() => {
                                                     const urls = editingItem.item.videoUrls?.split('\n').filter(Boolean) || [];
                                                     urls.splice(idx, 1);
                                                     updateItemField('videoUrls', urls.join('\n'));
                                                 }}
-                                                className="absolute top-0 right-0 bg-red-500 text-white w-5 h-5 flex items-center justify-center text-xs rounded-bl font-bold hover:bg-red-600"
+                                                className="absolute top-0 right-0 bg-ch-magenta text-white w-5 h-5 flex items-center justify-center text-xs rounded-bl font-bold hover:bg-ch-magenta"
                                             >×</button>
                                         </div>
                                     ))}
                                     {(editingItem.item.videoUrls?.split('\n').filter(Boolean).length || 0) < 2 && (
-                                        <label className="w-36 h-24 border-2 border-dashed border-blue-400 dark:border-blue-500 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-500 dark:text-blue-400 transition-colors">
+                                        <label className="w-36 h-24 border-2 border-dashed border-blue-400 dark:border-ch-cyan rounded-xl flex flex-col items-center justify-center cursor-pointer hover:bg-ch-cyan/10 dark:hover:bg-blue-900/40 text-ch-cyan text-ch-cyan transition-colors">
                                             <span className="text-2xl">+</span>
                                             <span className="text-xs">Vídeo</span>
                                             <input type="file" accept="video/*" className="hidden" onChange={(e) => {
@@ -625,35 +627,35 @@ export const Categories: React.FC = () => {
                                         </label>
                                     )}
                                 </div>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">Máx 50MB por vídeo.</p>
+                                <p className="text-xs text-ch-muted">Máx 50MB por vídeo.</p>
                             </div>
 
                             {/* Documentos - até 5 */}
-                            <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
-                                <label className="block text-sm font-semibold text-gray-800 dark:text-gray-100 mb-3">📄 Documentos (até 5)</label>
+                            <div className="bg-emerald-500/10 dark:bg-green-900/20 p-4 rounded-xl border border-green-200 dark:border-green-800">
+                                <label className="block text-sm font-semibold text-ch-text dark:text-gray-100 mb-3">📄 Documentos (até 5)</label>
                                 <div className="space-y-2 mb-2">
                                     {(editingItem.item.documentUrls?.split('\n').filter(Boolean) || []).slice(0, 5).map((url, idx) => {
                                         const fileName = url.startsWith('data:') ? `Documento ${idx + 1}` : url.split('/').pop() || `Documento ${idx + 1}`;
                                         return (
-                                            <div key={idx} className="flex items-center gap-2 bg-white dark:bg-gray-700 p-2 rounded border dark:border-gray-600">
-                                                <span className="text-green-600">📄</span>
-                                                <span className="flex-1 text-sm truncate dark:text-gray-200">{fileName}</span>
-                                                <button 
+                                            <div key={idx} className="flex items-center gap-2 bg-ch-surface-2 p-2 rounded border border-ch-border">
+                                                <span className="text-emerald-400">📄</span>
+                                                <span className="flex-1 text-sm truncate text-ch-text">{fileName}</span>
+                                                <button
                                                     onClick={() => {
                                                         const urls = editingItem.item.documentUrls?.split('\n').filter(Boolean) || [];
                                                         urls.splice(idx, 1);
                                                         updateItemField('documentUrls', urls.join('\n'));
                                                     }}
-                                                    className="text-red-500 hover:text-red-700 text-lg font-bold"
+                                                    className="text-ch-magenta hover:text-ch-magenta text-lg font-bold"
                                                 >×</button>
                                             </div>
                                         );
                                     })}
                                 </div>
                                 {(editingItem.item.documentUrls?.split('\n').filter(Boolean).length || 0) < 5 && (
-                                    <label className="inline-flex items-center gap-2 px-3 py-2 border-2 border-dashed border-green-400 dark:border-green-500 rounded cursor-pointer hover:bg-green-100 dark:hover:bg-green-900/40 text-green-600 dark:text-green-400 text-sm transition-colors">
+                                    <label className="inline-flex items-center gap-2 px-3 py-2 border-2 border-dashed border-green-400 dark:border-green-500 rounded cursor-pointer hover:bg-emerald-500/10 dark:hover:bg-green-900/40 text-emerald-400 text-emerald-400 text-sm transition-colors">
                                         <span>+ Adicionar documento</span>
-                                        <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt" className="hidden" onChange={(e) => {
+                                        <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.html" className="hidden" onChange={(e) => {
                                             const file = e.target.files?.[0];
                                             if (file && file.size <= 10 * 1024 * 1024) { // Max 10MB
                                                 const reader = new FileReader();
@@ -670,118 +672,118 @@ export const Categories: React.FC = () => {
                                         }} />
                                     </label>
                                 )}
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">PDF, DOC, XLS, TXT. Máx 10MB.</p>
+                                <p className="text-xs text-ch-muted mt-2">PDF, DOC, XLS, TXT, HTML. Máx 10MB.</p>
                             </div>
 
                             {/* Campos do formulário */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1">Nome/Identificador <span className="text-red-500">*</span></label>
+                                    <label className="block text-sm font-semibold text-ch-text dark:text-gray-100 mb-1">Nome/Identificador <span className="text-ch-magenta">*</span></label>
                                     <input type="text" value={editingItem.item.name || ''} onChange={e => updateItemField('name', e.target.value)}
-                                        className="w-full border dark:border-gray-600 rounded-lg p-3 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500" placeholder="Ex: Locação 1, Casa Verde" required />
+                                        className="w-full border border-ch-border rounded-xl p-3 bg-ch-surface-2 text-ch-text focus:ring-2 focus:ring-ch-cyan/50" placeholder="Ex: Locação 1, Casa Verde" required />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1">Título <span className="text-red-500">*</span></label>
+                                    <label className="block text-sm font-semibold text-ch-text dark:text-gray-100 mb-1">Título <span className="text-ch-magenta">*</span></label>
                                     <input type="text" value={editingItem.item.title || ''} onChange={e => updateItemField('title', e.target.value)}
-                                        className="w-full border dark:border-gray-600 rounded-lg p-3 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500" placeholder="Título exibido na conversa" required />
+                                        className="w-full border border-ch-border rounded-xl p-3 bg-ch-surface-2 text-ch-text focus:ring-2 focus:ring-ch-cyan/50" placeholder="Título exibido na conversa" required />
                                 </div>
                             </div>
-                            
+
                             {/* Descrição com ferramentas WhatsApp */}
                             <div>
-                                <label className="block text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1">Descrição</label>
-                                <div className="border dark:border-gray-600 rounded-lg overflow-hidden">
-                                    <div className="bg-gray-100 dark:bg-gray-700 px-3 py-2 border-b dark:border-gray-600 flex gap-2">
+                                <label className="block text-sm font-semibold text-ch-text dark:text-gray-100 mb-1">Descrição</label>
+                                <div className="border border-ch-border rounded-xl overflow-hidden">
+                                    <div className="bg-ch-surface-2 px-3 py-2 border-b border-ch-border flex gap-2">
                                         <button type="button" onClick={() => {
                                             const desc = editingItem.item.description || '';
                                             updateItemField('description', desc + '*texto*');
-                                        }} className="px-2 py-1 text-sm bg-white dark:bg-gray-600 border dark:border-gray-500 rounded hover:bg-gray-200 dark:hover:bg-gray-500 dark:text-white" title="Negrito">
+                                        }} className="px-2 py-1 text-sm bg-ch-surface bg-ch-surface-2 border dark:border-gray-500 rounded hover:bg-ch-surface-2 dark:hover:bg-ch-surface-20 text-ch-text" title="Negrito">
                                             <Bold size={16} />
                                         </button>
                                         <button type="button" onClick={() => {
                                             const desc = editingItem.item.description || '';
                                             updateItemField('description', desc + '_texto_');
-                                        }} className="px-2 py-1 text-sm bg-white dark:bg-gray-600 border dark:border-gray-500 rounded hover:bg-gray-200 dark:hover:bg-gray-500 dark:text-white" title="Itálico">
+                                        }} className="px-2 py-1 text-sm bg-ch-surface bg-ch-surface-2 border dark:border-gray-500 rounded hover:bg-ch-surface-2 dark:hover:bg-ch-surface-20 text-ch-text" title="Itálico">
                                             <Italic size={16} />
                                         </button>
                                         <button type="button" onClick={() => {
                                             const desc = editingItem.item.description || '';
                                             updateItemField('description', desc + '~texto~');
-                                        }} className="px-2 py-1 text-sm bg-white dark:bg-gray-600 border dark:border-gray-500 rounded hover:bg-gray-200 dark:hover:bg-gray-500 dark:text-white" title="Riscado">
+                                        }} className="px-2 py-1 text-sm bg-ch-surface bg-ch-surface-2 border dark:border-gray-500 rounded hover:bg-ch-surface-2 dark:hover:bg-ch-surface-20 text-ch-text" title="Riscado">
                                             <Strikethrough size={16} />
                                         </button>
                                         <button type="button" onClick={() => {
                                             const desc = editingItem.item.description || '';
                                             updateItemField('description', desc + '```código```');
-                                        }} className="px-2 py-1 text-sm bg-white dark:bg-gray-600 border dark:border-gray-500 rounded hover:bg-gray-200 dark:hover:bg-gray-500 dark:text-white" title="Monoespaço">
+                                        }} className="px-2 py-1 text-sm bg-ch-surface bg-ch-surface-2 border dark:border-gray-500 rounded hover:bg-ch-surface-2 dark:hover:bg-ch-surface-20 text-ch-text" title="Monoespaço">
                                             <Code size={16} />
                                         </button>
-                                        <span className="text-xs text-gray-500 dark:text-gray-400 ml-2 self-center">WhatsApp: *negrito* _itálico_ ~riscado~</span>
+                                        <span className="text-xs text-ch-muted ml-2 self-center">WhatsApp: *negrito* _itálico_ ~riscado~</span>
                                     </div>
                                     <textarea value={editingItem.item.description || ''} onChange={e => updateItemField('description', e.target.value)}
-                                        className="w-full p-3 dark:bg-gray-700 dark:text-white min-h-[150px] resize-y focus:outline-none" placeholder="Descrição detalhada do item..." />
+                                        className="w-full p-3 bg-ch-surface-2 text-ch-text min-h-[150px] resize-y focus:outline-none" placeholder="Descrição detalhada do item..." />
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1">Empresa/Nome</label>
+                                    <label className="block text-sm font-semibold text-ch-text dark:text-gray-100 mb-1">Empresa/Nome</label>
                                     <input type="text" value={editingItem.item.empresa || ''} onChange={e => updateItemField('empresa', e.target.value)}
-                                        className="w-full border dark:border-gray-600 rounded-lg p-3 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500" />
+                                        className="w-full border border-ch-border rounded-xl p-3 bg-ch-surface-2 text-ch-text focus:ring-2 focus:ring-ch-cyan/50" />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1">Contato</label>
-                                    <input type="text" value={editingItem.item.contato || ''} 
+                                    <label className="block text-sm font-semibold text-ch-text dark:text-gray-100 mb-1">Contato</label>
+                                    <input type="text" value={editingItem.item.contato || ''}
                                         onChange={e => updateItemField('contato', formatPhone(e.target.value))}
-                                        className="w-full border dark:border-gray-600 rounded-lg p-3 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500" 
+                                        className="w-full border border-ch-border rounded-xl p-3 bg-ch-surface-2 text-ch-text focus:ring-2 focus:ring-ch-cyan/50"
                                         placeholder="(00) 00000-0000" maxLength={15} />
                                 </div>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1">E-mail</label>
+                                    <label className="block text-sm font-semibold text-ch-text dark:text-gray-100 mb-1">E-mail</label>
                                     <input type="email" value={editingItem.item.email || ''} onChange={e => updateItemField('email', e.target.value)}
-                                        className="w-full border dark:border-gray-600 rounded-lg p-3 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500" placeholder="email@exemplo.com" />
+                                        className="w-full border border-ch-border rounded-xl p-3 bg-ch-surface-2 text-ch-text focus:ring-2 focus:ring-ch-cyan/50" placeholder="email@exemplo.com" />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1">Valor</label>
-                                    <input type="text" value={editingItem.item.price || ''} 
+                                    <label className="block text-sm font-semibold text-ch-text dark:text-gray-100 mb-1">Valor</label>
+                                    <input type="text" value={editingItem.item.price || ''}
                                         onChange={e => updateItemField('price', formatCurrency(e.target.value))}
-                                        className="w-full border dark:border-gray-600 rounded-lg p-3 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500" 
+                                        className="w-full border border-ch-border rounded-xl p-3 bg-ch-surface-2 text-ch-text focus:ring-2 focus:ring-ch-cyan/50"
                                         placeholder="R$ 0,00" />
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1">Endereço Completo</label>
+                                <label className="block text-sm font-semibold text-ch-text dark:text-gray-100 mb-1">Endereço Completo</label>
                                 <input type="text" value={editingItem.item.endereco || ''} onChange={e => updateItemField('endereco', e.target.value)}
-                                    className="w-full border dark:border-gray-600 rounded-lg p-3 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500" placeholder="Rua, número, bairro, cidade - UF" />
+                                    className="w-full border border-ch-border rounded-xl p-3 bg-ch-surface-2 text-ch-text focus:ring-2 focus:ring-ch-cyan/50" placeholder="Rua, número, bairro, cidade - UF" />
                             </div>
                             <div>
-                                <label className="block text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1">Link de Localização</label>
+                                <label className="block text-sm font-semibold text-ch-text dark:text-gray-100 mb-1">Link de Localização</label>
                                 <input type="text" value={editingItem.item.locationLink || ''} onChange={e => updateItemField('locationLink', e.target.value)}
-                                    className="w-full border dark:border-gray-600 rounded-lg p-3 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500" placeholder="https://maps.google.com/..." />
+                                    className="w-full border border-ch-border rounded-xl p-3 bg-ch-surface-2 text-ch-text focus:ring-2 focus:ring-ch-cyan/50" placeholder="https://maps.google.com/..." />
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1">Link de Contato (WhatsApp)</label>
+                                    <label className="block text-sm font-semibold text-ch-text dark:text-gray-100 mb-1">Link de Contato (WhatsApp)</label>
                                     <input type="text" value={editingItem.item.contactLink || ''} onChange={e => updateItemField('contactLink', e.target.value)}
-                                        className="w-full border dark:border-gray-600 rounded-lg p-3 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500" placeholder="https://wa.me/5500000000000" />
+                                        className="w-full border border-ch-border rounded-xl p-3 bg-ch-surface-2 text-ch-text focus:ring-2 focus:ring-ch-cyan/50" placeholder="https://wa.me/5500000000000" />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-800 dark:text-gray-100 mb-1">Link Web</label>
+                                    <label className="block text-sm font-semibold text-ch-text dark:text-gray-100 mb-1">Link Web</label>
                                     <input type="text" value={editingItem.item.webLink || ''} onChange={e => updateItemField('webLink', e.target.value)}
-                                        className="w-full border dark:border-gray-600 rounded-lg p-3 dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500" placeholder="https://..." />
+                                        className="w-full border border-ch-border rounded-xl p-3 bg-ch-surface-2 text-ch-text focus:ring-2 focus:ring-ch-cyan/50" placeholder="https://..." />
                                 </div>
                             </div>
                             <div className="flex items-center gap-3 pt-2">
                                 <input type="checkbox" id="itemEnabled" checked={editingItem.item.enabled !== false}
                                     onChange={e => updateItemField('enabled', e.target.checked)} className="w-5 h-5 rounded" />
-                                <label htmlFor="itemEnabled" className="text-sm font-semibold text-gray-800 dark:text-gray-100">Ativo (visível no bot)</label>
+                                <label htmlFor="itemEnabled" className="text-sm font-semibold text-ch-text dark:text-gray-100">Ativo (visível no bot)</label>
                             </div>
                         </div>
-                        <div className="p-4 md:p-6 border-t dark:border-gray-700 flex justify-end gap-3 sticky bottom-0 bg-white dark:bg-gray-800">
-                            <button onClick={() => setEditingItem(null)} className="px-5 py-2.5 border dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300 font-medium">Cancelar</button>
-                            <button onClick={handleSaveItem} className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">Salvar</button>
+                        <div className="p-4 md:p-6 border-t border-ch-border flex justify-end gap-3 sticky bottom-0 glass">
+                            <button onClick={() => setEditingItem(null)} className="px-5 py-2.5 border border-ch-border rounded-xl hover:bg-ch-surface-2 hover:bg-ch-surface-2 text-ch-text font-medium">Cancelar</button>
+                            <button onClick={handleSaveItem} className="px-5 py-2.5 bg-ch-cyan text-white rounded-xl hover:bg-ch-cyan/80 font-medium">Salvar</button>
                         </div>
                     </div>
                 </div>

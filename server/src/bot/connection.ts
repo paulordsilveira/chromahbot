@@ -13,7 +13,20 @@ import './flow'; // Import to register listeners
 
 const AUTH_FOLDER = path.resolve(__dirname, '../../auth_info');
 
+let currentSock: any = null;
+
 async function connectToWhatsApp() {
+    // Limpar sock anterior para evitar listeners duplicados
+    if (currentSock) {
+        try {
+            currentSock.ev.removeAllListeners('messages.upsert');
+            currentSock.ev.removeAllListeners('connection.update');
+            currentSock.ev.removeAllListeners('creds.update');
+        } catch (e) {
+            // ignore
+        }
+    }
+
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_FOLDER);
     const { version, isLatest } = await fetchLatestBaileysVersion();
 
@@ -29,6 +42,8 @@ async function connectToWhatsApp() {
         },
         logger: P({ level: 'silent' })
     });
+
+    currentSock = sock;
 
     sock.ev.on('connection.update', (update: Partial<ConnectionState>) => {
         const { connection, lastDisconnect, qr } = update;
@@ -52,18 +67,33 @@ async function connectToWhatsApp() {
             console.log('Successfully opened connection!');
             eventBus.emit('bot.status', 'connected');
             eventBus.emit('bot.log', 'Successfully opened connection!');
+
+            const user = sock.user;
+            if (user) {
+                (async () => {
+                    let profilePicUrl = null;
+                    try {
+                        profilePicUrl = await sock.profilePictureUrl(user.id);
+                    } catch (e) {
+                        console.log('Could not fetch bot profile pic');
+                    }
+                    eventBus.emit('bot.user', {
+                        id: user.id,
+                        name: user.name,
+                        pic: profilePicUrl
+                    });
+                })();
+            }
         }
     });
 
     sock.ev.on('creds.update', saveCreds);
 
-    // Initial message handler placeholder
+    // Message handler
     sock.ev.on('messages.upsert', async m => {
         if (m.type === 'notify') {
             for (const msg of m.messages) {
-                if (!msg.key.fromMe) {
-                    eventBus.emit('message.received', { msg, sock });
-                }
+                eventBus.emit('message.received', { msg, sock });
             }
         }
     });
@@ -73,3 +103,4 @@ async function connectToWhatsApp() {
 
 // Start connection
 connectToWhatsApp();
+

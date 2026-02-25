@@ -26,6 +26,7 @@ app.use('/api', routes);
 
 let currentQrCode: string | null = null;
 let currentBotStatus: string = 'disconnected';
+let currentBotUser: any = null;
 
 // Socket.io integration
 io.on('connection', (socket) => {
@@ -33,6 +34,9 @@ io.on('connection', (socket) => {
     socket.emit('bot.status', currentBotStatus);
     if (currentQrCode) {
         socket.emit('bot.qr', currentQrCode);
+    }
+    if (currentBotUser) {
+        socket.emit('bot.user', currentBotUser);
     }
 });
 
@@ -48,8 +52,15 @@ eventBus.on('bot.status', (status) => {
     currentBotStatus = status;
     if (status === 'connected') {
         currentQrCode = null;
+    } else if (status === 'disconnected') {
+        currentBotUser = null;
     }
     io.emit('bot.status', status);
+});
+
+eventBus.on('bot.user', (user) => {
+    currentBotUser = user;
+    io.emit('bot.user', user);
 });
 
 eventBus.on('bot.log', (log) => {

@@ -7,12 +7,14 @@ interface SocketContextType {
     socket: Socket | null;
     botStatus: string;
     qrCode: string | null;
+    botUser: { id?: string; name?: string; pic?: string | null } | null;
 }
 
 const SocketContext = createContext<SocketContextType>({
     socket: null,
     botStatus: 'disconnected',
     qrCode: null,
+    botUser: null,
 });
 
 export const useSocket = () => useContext(SocketContext);
@@ -21,6 +23,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const [socket, setSocket] = useState<Socket | null>(null);
     const [botStatus, setBotStatus] = useState<string>('disconnected');
     const [qrCode, setQrCode] = useState<string | null>(null);
+    const [botUser, setBotUser] = useState<any>(null);
 
     useEffect(() => {
         const newSocket = io(SOCKET_URL);
@@ -44,13 +47,18 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             setBotStatus('qrcode');
         });
 
+        newSocket.on('bot.user', (user: any) => {
+            console.log('Bot User received:', user);
+            setBotUser(user);
+        });
+
         return () => {
             newSocket.disconnect();
         };
     }, []);
 
     return (
-        <SocketContext.Provider value={{ socket, botStatus, qrCode }}>
+        <SocketContext.Provider value={{ socket, botStatus, qrCode, botUser }}>
             {children}
         </SocketContext.Provider>
     );

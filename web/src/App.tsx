@@ -6,8 +6,10 @@ import { Sidebar, MobileHeader } from './components/Sidebar';
 import { Dashboard } from './pages/Dashboard';
 import { Categories } from './pages/Categories';
 import { Settings } from './pages/Settings';
+import { Commands } from './pages/Commands';
 import { Leads } from './pages/Leads';
 import { Forms } from './pages/Forms';
+import { CRM } from './pages/CRM';
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -16,7 +18,7 @@ function App() {
     <ThemeProvider>
       <SocketProvider>
         <Router>
-          <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900 font-sans text-gray-900 dark:text-gray-100 transition-colors">
+          <div className="flex min-h-screen bg-ch-bg font-sans text-ch-text">
             <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
             <div className="flex-1 flex flex-col min-w-0">
               <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
@@ -24,6 +26,8 @@ function App() {
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/categorias" element={<Categories />} />
+                  <Route path="/crm" element={<CRM />} />
+                  <Route path="/comandos" element={<Commands />} />
                   <Route path="/configuracoes" element={<Settings />} />
                   <Route path="/leads" element={<Leads />} />
                   <Route path="/formularios" element={<Forms />} />

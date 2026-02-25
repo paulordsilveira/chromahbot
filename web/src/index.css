@@ -1,7 +1,84 @@
 @import "tailwindcss";
 
+@theme {
+  --color-ch-bg: #0a0a0f;
+  --color-ch-surface: #12121a;
+  --color-ch-surface-2: #1a1a28;
+  --color-ch-border: #2a2a3a;
+  --color-ch-cyan: #00f5d4;
+  --color-ch-magenta: #f72585;
+  --color-ch-purple: #7b2ff7;
+  --color-ch-text: #e8e8f0;
+  --color-ch-muted: #6b6b80;
+}
+
 @layer base {
   body {
-    @apply bg-gray-50 text-gray-900;
+    background-color: var(--color-ch-bg);
+    color: var(--color-ch-text);
+  }
+
+  /* Scrollbar neon */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--color-ch-bg);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-ch-border);
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-ch-cyan);
+  }
+}
+
+@layer utilities {
+  .glow-cyan {
+    box-shadow: 0 0 20px rgba(0, 245, 212, 0.15), 0 0 40px rgba(0, 245, 212, 0.05);
+  }
+
+  .glow-magenta {
+    box-shadow: 0 0 20px rgba(247, 37, 133, 0.15), 0 0 40px rgba(247, 37, 133, 0.05);
+  }
+
+  .glow-purple {
+    box-shadow: 0 0 20px rgba(123, 47, 247, 0.15), 0 0 40px rgba(123, 47, 247, 0.05);
+  }
+
+  .glass {
+    background: rgba(18, 18, 26, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .gradient-btn {
+    background: linear-gradient(135deg, var(--color-ch-cyan), var(--color-ch-purple));
+  }
+
+  .gradient-btn:hover {
+    background: linear-gradient(135deg, var(--color-ch-purple), var(--color-ch-cyan));
+  }
+
+  .border-glow-cyan {
+    border: 1px solid rgba(0, 245, 212, 0.3);
+  }
+
+  .border-glow-purple {
+    border: 1px solid rgba(123, 47, 247, 0.3);
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 }

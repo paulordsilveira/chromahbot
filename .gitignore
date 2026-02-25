@@ -34,3 +34,11 @@ server/auth_info/
 
 # Agent/IDE
 .agent/
+.gemini/
+
+# Debug/Temp
+server/debug_messages.jsonl
+server/search_results.txt
+
+# Backups
+web/src/pages/Settings_new.tsx

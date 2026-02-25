@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 
-const dbPath = path.resolve(__dirname, '../../data/corretando.db');
+const dbPath = path.resolve(__dirname, '../../data/chromah.db');
 const db = Database(dbPath);
 
 db.pragma('journal_mode = WAL');
@@ -108,23 +108,75 @@ addColumnIfNotExists('category', 'emoji', 'TEXT');
 addColumnIfNotExists('subcategory', 'emoji', 'TEXT');
 addColumnIfNotExists('item', 'videoUrls', 'TEXT');
 addColumnIfNotExists('item', 'documentUrls', 'TEXT');
+addColumnIfNotExists('config', 'openRouterApiKey', 'TEXT');
+addColumnIfNotExists('config', 'selectedModel', 'TEXT');
+
+// CRM columns for contact
+addColumnIfNotExists('contact', 'statusAtual', "TEXT DEFAULT 'atendido'");
+addColumnIfNotExists('contact', 'statusHistorico', 'TEXT');
+addColumnIfNotExists('contact', 'observacao', 'TEXT');
+
+// Lead/Notification system
+addColumnIfNotExists('config', 'notificationPhone', 'TEXT');
+addColumnIfNotExists('config', 'humanKeywords', 'TEXT');
+addColumnIfNotExists('config', 'pauseCommands', 'TEXT');
+addColumnIfNotExists('config', 'resumeCommands', 'TEXT');
+addColumnIfNotExists('config', 'docCommands', 'TEXT');
+addColumnIfNotExists('config', 'menuCommands', 'TEXT');
+addColumnIfNotExists('config', 'docsMessage', 'TEXT');
+addColumnIfNotExists('config', 'docsFiles', 'TEXT');
+addColumnIfNotExists("config", "isAiEnabled", "INTEGER DEFAULT 1");
+addColumnIfNotExists('config', 'botNumber', 'TEXT');
+addColumnIfNotExists('contact', 'botPaused', 'INTEGER DEFAULT 0');
+
+// Lead tickets table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS lead_ticket (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contactId INTEGER NOT NULL,
+    type TEXT NOT NULL,
+    status TEXT DEFAULT 'pending',
+    summary TEXT,
+    notifiedAt TEXT DEFAULT (datetime('now')),
+    attendedAt TEXT,
+    FOREIGN KEY (contactId) REFERENCES contact(id)
+  );
+`);
+
+// Custom Commands table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS custom_command (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    triggers TEXT NOT NULL,
+    textMessage TEXT,
+    fileData TEXT,
+    isActive INTEGER DEFAULT 1,
+    createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+    linkedSubcategoryId INTEGER,
+    linkedItemId INTEGER
+  );
+`);
+
+addColumnIfNotExists('custom_command', 'isActive', 'INTEGER DEFAULT 1');
+addColumnIfNotExists('custom_command', 'createdAt', 'TEXT');
+addColumnIfNotExists('custom_command', 'linkedSubcategoryId', 'INTEGER');
+addColumnIfNotExists('custom_command', 'linkedItemId', 'INTEGER');
+db.prepare("UPDATE custom_command SET createdAt = datetime('now', 'localtime') WHERE createdAt IS NULL").run();
 
 const existingConfig = db.prepare('SELECT id FROM config WHERE id = 1').get();
 if (!existingConfig) {
-  db.prepare(`INSERT INTO config (id, welcomeMessage, activeAiProvider) VALUES (1, 'Olá! Seja bem-vindo ao assistente virtual da Corretando. Como posso ajudar hoje?', 'gemini')`).run();
+  db.prepare(`INSERT INTO config (id, welcomeMessage, activeAiProvider) VALUES (1, 'Olá! Seja bem-vindo à ChromaH — soluções digitais conscientes. Como posso ajudar?', 'gemini')`).run();
 }
 
 const existingCategories = db.prepare('SELECT COUNT(*) as count FROM category').get() as { count: number };
 if (existingCategories.count === 0) {
   const insertCat = db.prepare('INSERT INTO category (name, "order") VALUES (?, ?)');
   const categories = [
-    ['Portfólio de Imóveis', 1],
-    ['Terreno e Construção', 2],
-    ['Minha Casa Minha Vida', 3],
-    ['Parcerias (Corretores)', 4],
-    ['Serviços de Corretagem', 5],
-    ['Status / Acompanhamento', 6],
-    ['Recados / Outros', 7],
+    ['Soluções IA', 1],
+    ['Automações', 2],
+    ['Consultoria', 3],
+    ['Recursos', 4],
+    ['Suporte', 5],
   ];
   for (const [name, order] of categories) {
     insertCat.run(name, order);
