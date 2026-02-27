@@ -7,12 +7,38 @@ const API_URL = 'http://localhost:3020/api';
 interface Message {
     role: 'user' | 'assistant';
     content: string;
+    images?: string[];
 }
 
 export const AiTraining: React.FC = () => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
+    const [started, setStarted] = useState(false);
+
+    // Carrega a saudação inicial do bot igual no WhatsApp
+    const fetchGreeting = async () => {
+        setLoading(true);
+        try {
+            const { data } = await axios.post(`${API_URL}/ai-test`, {
+                message: '/bot-greeting',
+                history: []
+            });
+            if (data.responses && Array.isArray(data.responses)) {
+                const initialMsgs = data.responses.map((resp: any) => ({
+                    role: 'assistant',
+                    content: resp.content,
+                    images: resp.images
+                }));
+                setMessages(initialMsgs);
+            }
+        } catch (e: any) {
+            console.error("Erro ao carregar saudação:", e);
+        } finally {
+            setLoading(false);
+            setStarted(true);
+        }
+    };
 
     const handleSend = async () => {
         if (!input.trim() || loading) return;
@@ -22,8 +48,22 @@ export const AiTraining: React.FC = () => {
         setLoading(true);
 
         try {
-            const { data } = await axios.post(`${API_URL}/ai-test`, { message: userMsg });
-            setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
+            const { data } = await axios.post(`${API_URL}/ai-test`, {
+                message: userMsg,
+                history: messages // Passando histórico de contexto pra IA
+            });
+
+            if (data.responses && Array.isArray(data.responses)) {
+                data.responses.forEach((resp: any) => {
+                    setMessages(prev => [...prev, {
+                        role: 'assistant',
+                        content: resp.content,
+                        images: resp.images
+                    }]);
+                });
+            } else if (data.response) {
+                setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
+            }
         } catch (e: any) {
             setMessages(prev => [...prev, { role: 'assistant', content: `❌ Erro: ${e.response?.data?.error || e.message}` }]);
         } finally {
@@ -39,7 +79,7 @@ export const AiTraining: React.FC = () => {
                     <p className="text-ch-muted">Teste como a IA responde sem enviar ao WhatsApp</p>
                 </div>
                 {messages.length > 0 && (
-                    <button onClick={() => setMessages([])} className="p-2 hover:bg-ch-surface-2 rounded-xl text-ch-muted hover:text-ch-magenta transition-colors" title="Limpar conversa">
+                    <button onClick={() => { setMessages([]); setStarted(false); }} className="p-2 hover:bg-ch-surface-2 rounded-xl text-ch-muted hover:text-ch-magenta transition-colors" title="Limpar conversa">
                         <Trash2 size={20} />
                     </button>
                 )}
@@ -48,17 +88,14 @@ export const AiTraining: React.FC = () => {
             <div className="glass rounded-2xl border border-ch-border flex-1 flex flex-col overflow-hidden" style={{ minHeight: '60vh' }}>
                 {/* Área de mensagens */}
                 <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                    {messages.length === 0 && (
+                    {!started && messages.length === 0 && (
                         <div className="flex flex-col items-center justify-center h-full text-ch-muted">
                             <Brain size={64} className="mb-4 opacity-20" />
-                            <p className="text-lg font-medium">Envie uma mensagem para testar a IA</p>
-                            <p className="text-sm mt-2">As respostas usarão suas configurações atuais de System Prompt e Documentação</p>
+                            <p className="text-lg font-medium">Pronto para testar sua IA!</p>
                             <div className="flex flex-wrap gap-2 mt-6 justify-center">
-                                {['Oi, tudo bem?', 'Quais serviços vocês oferecem?', 'Quero falar com alguém', 'Menu'].map(s => (
-                                    <button key={s} onClick={() => { setInput(s); }} className="px-4 py-2 bg-ch-surface-2 hover:bg-ch-cyan/10 text-ch-text rounded-xl text-sm transition-colors">
-                                        {s}
-                                    </button>
-                                ))}
+                                <button onClick={fetchGreeting} className="gradient-btn px-6 py-2 text-ch-bg rounded-xl font-semibold transition-colors">
+                                    Iniciar Conversa
+                                </button>
                             </div>
                         </div>
                     )}
@@ -71,9 +108,16 @@ export const AiTraining: React.FC = () => {
                                 </div>
                             )}
                             <div className={`max-w-[75%] p-4 rounded-2xl text-sm whitespace-pre-wrap ${msg.role === 'user'
-                                    ? 'bg-ch-purple/20 text-ch-text rounded-br-md'
-                                    : 'bg-ch-surface-2 text-ch-text rounded-bl-md'
+                                ? 'bg-ch-purple/20 text-ch-text rounded-br-md'
+                                : 'bg-ch-surface-2 text-ch-text rounded-bl-md'
                                 }`}>
+                                {msg.images && msg.images.length > 0 && (
+                                    <div className="flex flex-col gap-2 mb-3">
+                                        {msg.images.map((img, idx) => (
+                                            <img key={idx} src={img} alt="Anexo simulado" className="max-w-full rounded-xl max-h-48 object-cover border border-ch-border" />
+                                        ))}
+                                    </div>
+                                )}
                                 {msg.content}
                             </div>
                             {msg.role === 'user' && (

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../infrastructure/database';
 import aiService from '../infrastructure/AiService';
 import { connectToWhatsApp, disconnectWhatsApp } from '../bot/connection';
+import { TOOL_DEFINITIONS } from '../bot/modules/constants';
 
 const router = Router();
 
@@ -1039,11 +1040,121 @@ router.delete('/scheduled-messages/:id', (req, res) => {
 
 router.post('/ai-test', async (req, res) => {
   try {
-    const { message } = req.body;
+    const { message, history } = req.body;
     if (!message) return res.status(400).json({ error: 'message é obrigatório' });
 
-    const response = await aiService.getAiResponse(message);
-    res.json({ response });
+    // --- COMANDO ESPECIAL: SIMULAR SAUDAÇÃO INICIAL DO WHATSAPP ---
+    if (message === '/bot-greeting') {
+      const config = db.prepare('SELECT welcomeMessage, logoImage FROM config WHERE id = 1').get() as any;
+      const text = config?.welcomeMessage || `Olá, Cliente! Tudo bem? Em que posso te ajudar? 😊`;
+      const images: string[] = [];
+
+      // Se tiver imagem (Base64) salva na configuração geral da empresa, adiciona ao display
+      if (config?.logoImage && config.logoImage.startsWith('data:image')) {
+        images.push(config.logoImage);
+      }
+
+      return res.json({
+        responses: [
+          {
+            type: 'text',
+            content: text,
+            images: images.length > 0 ? images : undefined
+          }
+        ]
+      });
+    }
+    // -------------------------------------------------------------
+
+    // history from frontend is mapped to { role, content }
+    const safeHistory = Array.isArray(history) ? history.map((h: any) => ({
+      role: h.role === 'user' ? 'user' : 'assistant',
+      content: h.content || ''
+    })) : [];
+
+    // Chama a IA incluindo as definições de tools e o histórico
+    const result = await aiService.getAiResponseWithTools(message, TOOL_DEFINITIONS, safeHistory);
+
+    // Array que armazenará todas as mensagens/ações resultantes simuladas
+    const responseMessages: any[] = [];
+
+    if (result.text) {
+      responseMessages.push({ type: 'text', content: result.text });
+    }
+
+    // Simula as tools interceptadas
+    if (result.toolCalls && result.toolCalls.length > 0) {
+      for (const tc of result.toolCalls) {
+        if (tc.name === 'enviar_menu_principal') {
+          const categories = db.prepare('SELECT * FROM category ORDER BY "order" ASC').all() as any[];
+          const menuText = categories.map((c, i) => `${i + 1}. ${c.emoji || ''} *${c.name}*`).join('\n');
+          responseMessages.push({ type: 'text', content: `(Simulação do Bot)\nVeja nossas opções:\n\n${menuText}\n\nDigite o número ou o nome da opção desejada.` });
+        } else if (tc.name === 'mostrar_categoria') {
+          const catName = tc.args.nome_categoria || '';
+          const cat = db.prepare('SELECT * FROM category WHERE LOWER(name) LIKE ?').get(`%${catName.toLowerCase()}%`) as any;
+          if (cat) {
+            const subcategories = db.prepare('SELECT * FROM subcategory WHERE categoryId = ? AND enabledInBot = 1 ORDER BY "order" ASC').all(cat.id) as any[];
+            if (subcategories.length > 0) {
+              const subsText = subcategories.map((s, i) => `${i + 1}. ${s.emoji || ''} *${s.name}*`).join('\n');
+              responseMessages.push({ type: 'text', content: `(Simulação do Bot)\nOpções em *${cat.name}*:\n\n${subsText}` });
+            } else {
+              responseMessages.push({ type: 'text', content: `A categoria *${cat.name}* não possui opções no momento.` });
+            }
+          } else {
+            responseMessages.push({ type: 'text', content: `Não encontrei a categoria "${catName}".` });
+          }
+        } else if (tc.name === 'mostrar_subcategoria') {
+          const subName = tc.args.nome_subcategoria || '';
+          const sub = db.prepare('SELECT s.*, c.name as catName FROM subcategory s JOIN category c ON s.categoryId = c.id WHERE s.enabledInBot = 1 AND LOWER(s.name) LIKE ?').get(`%${subName.toLowerCase()}%`) as any;
+          if (sub) {
+            const items = db.prepare('SELECT * FROM item WHERE subcategoryId = ? AND enabled = 1 ORDER BY id ASC').all(sub.id) as any[];
+            if (items.length > 0) {
+              const itemsText = items.map((item, i) => `${i + 1}. *${item.name}*`).join('\n');
+              responseMessages.push({ type: 'text', content: `(Simulação do Bot)\nOpções para *${sub.name}*:\n\n${itemsText}` });
+            } else {
+              responseMessages.push({ type: 'text', content: `Nenhuma opção encontrada para *${sub.name}*.` });
+            }
+          } else {
+            responseMessages.push({ type: 'text', content: `Não encontrei a subcategoria "${subName}".` });
+          }
+        } else if (tc.name === 'mostrar_item') {
+          const itemName = tc.args.nome_item || '';
+          const item = db.prepare('SELECT * FROM item WHERE enabled = 1 AND LOWER(name) LIKE ?').get(`%${itemName.toLowerCase()}%`) as any;
+          if (item) {
+            let text = `*${item.title || item.name}*\n\n${item.description || ''}`;
+            if (item.price) text += `\n💰 Valor: ${item.price}`;
+            if (item.webLink) text += `\n🌐 Link: ${item.webLink}`;
+
+            let images: string[] = [];
+            try { images = JSON.parse(item.imageUrls || '[]'); } catch { }
+
+            responseMessages.push({
+              type: 'item',
+              content: text,
+              images
+            });
+          } else {
+            responseMessages.push({ type: 'text', content: `Não encontrei o item "${itemName}".` });
+          }
+        } else if (tc.name === 'iniciar_formulario') {
+          const tipo = tc.args.tipo;
+          responseMessages.push({ type: 'text', content: `[Simulação da Tool]\nIniciando formulário interactivo do tipo: *${tipo}*\n(No WhatsApp real, o bot começaria a fazer as perguntas passo a passo).` });
+        } else if (tc.name === 'enviar_contato_humano') {
+          const config = db.prepare('SELECT contatoHumano FROM config WHERE id = 1').get() as any;
+          responseMessages.push({ type: 'text', content: `(Simulação do Bot)\nVou te passar o contato de um atendente humano agora mesmo! 👨‍💼\n\nContato: ${config?.contatoHumano || 'Não configurado'}` });
+        } else if (tc.name === 'enviar_faq') {
+          const config = db.prepare('SELECT faqText FROM config WHERE id = 1').get() as any;
+          responseMessages.push({ type: 'text', content: `(Simulação do Bot)\n*Dúvidas Frequentes:*\n\n${config?.faqText || 'Nenhum FAQ cadastrado.'}` });
+        }
+      }
+    }
+
+    // Se a IA não gerou texto nem chamou tools, falha segura
+    if (responseMessages.length === 0) {
+      responseMessages.push({ type: 'text', content: 'Desculpe, ocorreu um erro ao simular a resposta ou a IA não retornou nada.' });
+    }
+
+    res.json({ responses: responseMessages });
   } catch (err: any) {
     console.error('POST /ai-test error:', err);
     res.status(500).json({ error: err.message });
