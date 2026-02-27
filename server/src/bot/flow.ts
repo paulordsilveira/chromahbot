@@ -177,6 +177,15 @@ export const handleMessage = async (msg: WAMessage, sock: any) => {
         }
     }
 
+    // ─── 8.5. Seleção numérica (Menu Principal) ───
+    if (!userCategoryContext.has(jid) && !userSubcategoryContext.has(jid)) {
+        const sel = parseMenuSelection(lower);
+        if (sel.type === 'category') {
+            await handleMenuOption(sock, jid, sel.index, contactId);
+            return;
+        }
+    }
+
     // ─── 9. Saudação (primeira interação) ───
     if (GREETING_PATTERNS.test(lower)) {
         const lastWelcome = welcomedUsers.get(jid) || 0;
