@@ -12,7 +12,15 @@ export const conversationHistory = new Map<string, Array<{ role: string; content
 
 // ─── Funções de envio ───
 export const sendText = async (sock: any, jid: string, text: string) => {
-    await sock.sendMessage(jid, { text });
+    try {
+        console.log(`[sendText] Enviando para ${jid}: "${text.substring(0, 60)}..."`);
+        const result = await sock.sendMessage(jid, { text });
+        console.log(`[sendText] ✅ Mensagem enviada com sucesso para ${jid}`);
+        return result;
+    } catch (err: any) {
+        console.error(`[sendText] ❌ ERRO ao enviar mensagem para ${jid}:`, err.message || err);
+        throw err;
+    }
 };
 
 export const getPhoneFromJid = (jid: string) => {

@@ -117,13 +117,16 @@ export const displaySubcategories = async (sock: any, jid: string, categoryId: n
 
 // ─── Handle Menu Option ───
 export const handleMenuOption = async (sock: any, jid: string, index: number, contactId: number | null) => {
+    console.log(`[MenuNavigation] handleMenuOption chamado: index=${index}`);
     try {
         const categories = db.prepare('SELECT * FROM category ORDER BY "order" ASC').all() as any[];
         const category = categories[index - 1];
         if (!category) {
+            console.warn(`[MenuNavigation] Categoria não encontrada para index ${index}`);
             await sendAndLogText(sock, jid, contactId, "❌ Opção inválida. Digite *MENU* para voltar.");
             return;
         }
+        console.log(`[MenuNavigation] Categoria encontrada: ${category.name}`);
         userCategoryContext.set(jid, category.id);
         await displaySubcategories(sock, jid, category.id, contactId);
     } catch (e) {
