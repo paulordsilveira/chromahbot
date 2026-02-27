@@ -68,8 +68,6 @@ export const handleMessage = async (msg: WAMessage, sock: any) => {
     const lower = text.toLowerCase().trim();
     const normalized = text.trim();
 
-    console.log(`[Flow] 📥 Recebida mensagem de ${jid} (${name}): "${normalized}"`);
-
     if (isDuplicateByText(jid, lower)) return;
 
     // Emitir para o dashboard
@@ -179,12 +177,12 @@ export const handleMessage = async (msg: WAMessage, sock: any) => {
         }
     }
 
-    // ─── 8.5. Seleção numérica (Menu Principal) ───
+    // ─── 8.5. Seleção numérica (Menu Principal — sem contexto ativo) ───
+    // Quando nenhum contexto de categoria/subcategoria existe, trata dígitos
+    // como seleção direta no Menu Principal raíz.
     if (!userCategoryContext.has(jid) && !userSubcategoryContext.has(jid)) {
         const sel = parseMenuSelection(lower);
-        console.log(`[Flow] Menu Principal numérico: lower="${lower}" => parsed: `, sel);
         if (sel.type === 'category') {
-            console.log(`[Flow] Acionando handleMenuOption para a opção ${sel.index}`);
             await handleMenuOption(sock, jid, sel.index, contactId);
             return;
         }

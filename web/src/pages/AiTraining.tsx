@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import { Brain, Send, Bot, User, Loader2, Trash2 } from 'lucide-react';
 
@@ -15,6 +15,14 @@ export const AiTraining: React.FC = () => {
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [started, setStarted] = useState(false);
+
+    // Ref para auto-scroll até a última mensagem do chat
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    // Sempre rola para o final quando novas mensagens chegam
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages, loading]);
 
     // Carrega a saudação inicial do bot igual no WhatsApp
     const fetchGreeting = async () => {
@@ -53,14 +61,14 @@ export const AiTraining: React.FC = () => {
                 history: messages // Passando histórico de contexto pra IA
             });
 
+            // Fix 4: Atualiza state de mensagens em lote para evitar race condition
             if (data.responses && Array.isArray(data.responses)) {
-                data.responses.forEach((resp: any) => {
-                    setMessages(prev => [...prev, {
-                        role: 'assistant',
-                        content: resp.content,
-                        images: resp.images
-                    }]);
-                });
+                const newMsgs: Message[] = data.responses.map((resp: any) => ({
+                    role: 'assistant' as const,
+                    content: resp.content,
+                    images: resp.images
+                }));
+                setMessages(prev => [...prev, ...newMsgs]);
             } else if (data.response) {
                 setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
             }
@@ -138,6 +146,8 @@ export const AiTraining: React.FC = () => {
                             </div>
                         </div>
                     )}
+                    {/* Elemento âncora para auto-scroll */}
+                    <div ref={messagesEndRef} />
                 </div>
 
                 {/* Input */}

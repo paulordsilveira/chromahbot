@@ -11,14 +11,13 @@ export const welcomedUsers = new Map<string, number>();
 export const conversationHistory = new Map<string, Array<{ role: string; content: string }>>();
 
 // ─── Funções de envio ───
+// Envia uma mensagem de texto pelo WhatsApp via Baileys
 export const sendText = async (sock: any, jid: string, text: string) => {
     try {
-        console.log(`[sendText] Enviando para ${jid}: "${text.substring(0, 60)}..."`);
         const result = await sock.sendMessage(jid, { text });
-        console.log(`[sendText] ✅ Mensagem enviada com sucesso para ${jid}`);
         return result;
     } catch (err: any) {
-        console.error(`[sendText] ❌ ERRO ao enviar mensagem para ${jid}:`, err.message || err);
+        console.error(`[sendText] ❌ ERRO ao enviar para ${jid}:`, err.message || err);
         throw err;
     }
 };
@@ -61,6 +60,10 @@ export function addToHistory(jid: string, role: 'user' | 'assistant', content: s
     if (hist.length > MAX_HISTORY) hist.splice(0, hist.length - MAX_HISTORY);
 }
 
+/**
+ * Interpreta texto numérico como seleção de menu.
+ * Retorna { type: 'category', index: N } se for número, senão { type: 'none' }.
+ */
 export const parseMenuSelection = (raw: string) => {
     const trimmed = raw.trim();
     const catMatch = trimmed.match(/^(\d+)$/);
@@ -68,6 +71,22 @@ export const parseMenuSelection = (raw: string) => {
         return { type: 'category' as const, index: Number(catMatch[1]) };
     }
     return { type: 'none' as const };
+};
+
+/**
+ * Faz o parsing de imageUrls de um item do banco de dados.
+ * Suporta tanto JSON array quanto URLs separadas por newline.
+ * Garante formato unificado para uso no WhatsApp e no Treinar IA.
+ */
+export const parseImageUrls = (imageUrlsRaw: string | null | undefined): string[] => {
+    if (!imageUrlsRaw) return [];
+    try {
+        // Tenta parsear como JSON array primeiro
+        const parsed = JSON.parse(imageUrlsRaw);
+        if (Array.isArray(parsed)) return parsed.filter((u: string) => u?.trim());
+    } catch { }
+    // Fallback: URLs separadas por newline
+    return imageUrlsRaw.split('\n').filter((url: string) => url.trim()).map((u: string) => u.trim());
 };
 
 export const getNumberEmoji = (num: number): string => {
@@ -93,18 +112,24 @@ export const getCategoryDefaultEmoji = (name: string): string => {
     return '📁';
 };
 
-export const isSpecialSubcategory = (subName: string, categoryName?: string): 'simulacao' | 'corretor' | 'processos' | 'duvidas' | 'locacao' | 'contato' | null => {
+/**
+ * Detecta se uma subcategoria é "especial" e deve acionar uma ação dinâmica
+ * (formulário, FAQ, contato humano, etc.) ao invés de listar itens.
+ *
+ * IMPORTANTE: verifica APENAS o nome da subcategoria, não da categoria-pai,
+ * para evitar falsos positivos (ex: categoria "Falar com Paulo" não deve
+ * forçar todas as subcategorias dela a virarem contato humano).
+ */
+export const isSpecialSubcategory = (subName: string, _categoryName?: string): 'simulacao' | 'corretor' | 'processos' | 'duvidas' | 'locacao' | 'contato' | null => {
     const lowerSub = subName.toLowerCase();
-    const lowerCat = categoryName ? categoryName.toLowerCase() : '';
 
-    if (lowerSub.includes('simulação') || lowerSub.includes('simulacao') || lowerCat.includes('simulação') || lowerCat.includes('simulacao')) return 'simulacao';
-    if (lowerSub.includes('corretor') || lowerSub.includes('cadastro de corretor') || lowerCat.includes('corretor')) return 'corretor';
-    if (lowerSub.includes('processo') || lowerCat.includes('processo')) return 'processos';
-    if (lowerSub.includes('dúvida') || lowerSub.includes('duvida') || lowerCat.includes('dúvida') || lowerCat.includes('duvida')) return 'duvidas';
-    if (lowerSub.includes('falar com') || lowerCat.includes('falar com')) return 'contato';
+    if (lowerSub.includes('simulação') || lowerSub.includes('simulacao')) return 'simulacao';
+    if (lowerSub.includes('corretor') || lowerSub.includes('cadastro de corretor')) return 'corretor';
+    if (lowerSub.includes('processo')) return 'processos';
+    if (lowerSub.includes('dúvida') || lowerSub.includes('duvida')) return 'duvidas';
+    if (lowerSub.includes('falar com')) return 'contato';
 
-    if ((lowerSub.includes('cadastro') && (lowerSub.includes('locação') || lowerSub.includes('locacao') || lowerSub.includes('venda'))) ||
-        (lowerCat.includes('cadastro') && (lowerCat.includes('locação') || lowerCat.includes('locacao') || lowerCat.includes('venda')))) {
+    if (lowerSub.includes('cadastro') && (lowerSub.includes('locação') || lowerSub.includes('locacao') || lowerSub.includes('venda'))) {
         return 'locacao';
     }
     return null;

@@ -13,7 +13,18 @@ export const startForm = async (sock: any, jid: string, contactId: number | null
 };
 
 // ─── Processar Etapa do Formulário ───
+// Recebe o input do usuário e avança no formulário step-by-step.
+// Se o usuário digitar "voltar", "menu" ou "cancelar", sai do formulário.
 export const handleFormStep = async (sock: any, jid: string, contactId: number | null, input: string, state: FormState) => {
+    const lower = input.toLowerCase().trim();
+
+    // Permitir escapar de um formulário com comandos de navegação
+    if (lower === 'cancelar' || lower === 'cancel' || lower === 'voltar' || lower === 'menu') {
+        userFormStates.delete(jid);
+        await sendAndLogText(sock, jid, contactId, '✅ Formulário cancelado. Digite *MENU* para ver as opções.');
+        return;
+    }
+
     const steps = FORM_STEPS[state.type];
     const currentField = steps[state.step];
     const prompts = FORM_PROMPTS[state.type];

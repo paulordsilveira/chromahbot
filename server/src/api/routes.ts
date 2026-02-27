@@ -3,6 +3,8 @@ import db from '../infrastructure/database';
 import aiService from '../infrastructure/AiService';
 import { connectToWhatsApp, disconnectWhatsApp } from '../bot/connection';
 import { TOOL_DEFINITIONS } from '../bot/modules/constants';
+import { formatItemMessage } from '../bot/modules/menuNavigation';
+import { parseImageUrls } from '../bot/modules/helpers';
 
 const router = Router();
 
@@ -1118,20 +1120,18 @@ router.post('/ai-test', async (req, res) => {
             responseMessages.push({ type: 'text', content: `Não encontrei a subcategoria "${subName}".` });
           }
         } else if (tc.name === 'mostrar_item') {
+          // Fix 9: Reutiliza formatItemMessage e parseImageUrls para manter
+          // consistência entre o WhatsApp real e o Treinar IA.
           const itemName = tc.args.nome_item || '';
           const item = db.prepare('SELECT * FROM item WHERE enabled = 1 AND LOWER(name) LIKE ?').get(`%${itemName.toLowerCase()}%`) as any;
           if (item) {
-            let text = `*${item.title || item.name}*\n\n${item.description || ''}`;
-            if (item.price) text += `\n💰 Valor: ${item.price}`;
-            if (item.webLink) text += `\n🌐 Link: ${item.webLink}`;
-
-            let images: string[] = [];
-            try { images = JSON.parse(item.imageUrls || '[]'); } catch { }
+            const text = formatItemMessage(item);
+            const images = parseImageUrls(item.imageUrls);
 
             responseMessages.push({
               type: 'item',
               content: text,
-              images
+              images: images.length > 0 ? images : undefined
             });
           } else {
             responseMessages.push({ type: 'text', content: `Não encontrei o item "${itemName}".` });

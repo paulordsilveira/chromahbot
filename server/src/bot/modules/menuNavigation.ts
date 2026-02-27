@@ -2,7 +2,7 @@ import db from '../../infrastructure/database';
 import {
     sendAndLogText, sendText, logMessage, getNumberEmoji,
     getCategoryDefaultEmoji, isSpecialSubcategory,
-    userCategoryContext, userSubcategoryContext
+    userCategoryContext, userSubcategoryContext, parseImageUrls
 } from './helpers';
 import { startForm } from './formHandler';
 import { handleDuvidas, sendHumanContact } from './specialActions';
@@ -116,17 +116,15 @@ export const displaySubcategories = async (sock: any, jid: string, categoryId: n
 };
 
 // ─── Handle Menu Option ───
+// Processa a seleção numérica do Menu Principal, buscando a categoria pelo índice.
 export const handleMenuOption = async (sock: any, jid: string, index: number, contactId: number | null) => {
-    console.log(`[MenuNavigation] handleMenuOption chamado: index=${index}`);
     try {
         const categories = db.prepare('SELECT * FROM category ORDER BY "order" ASC').all() as any[];
         const category = categories[index - 1];
         if (!category) {
-            console.warn(`[MenuNavigation] Categoria não encontrada para index ${index}`);
             await sendAndLogText(sock, jid, contactId, "❌ Opção inválida. Digite *MENU* para voltar.");
             return;
         }
-        console.log(`[MenuNavigation] Categoria encontrada: ${category.name}`);
         userCategoryContext.set(jid, category.id);
         await displaySubcategories(sock, jid, category.id, contactId);
     } catch (e) {
@@ -219,22 +217,22 @@ export const handleItemOption = async (sock: any, jid: string, categoryId: numbe
 
 // ─── Enviar Item com Imagens/Documentos/Vídeos ───
 export const sendItemWithImages = async (sock: any, jid: string, contactId: number | null, item: any) => {
-    // Enviar imagens
-    if (item.imageUrls) {
-        const images = item.imageUrls.split('\n').filter((url: string) => url.trim());
-        for (let i = 0; i < images.length && i < 10; i++) {
-            try {
-                const imgUrl = images[i].trim();
-                if (imgUrl.startsWith('data:')) {
-                    const base64Data = imgUrl.split(',')[1];
-                    const mimeType = imgUrl.split(';')[0].split(':')[1] || 'image/jpeg';
-                    await sock.sendMessage(jid, { image: Buffer.from(base64Data, 'base64'), mimetype: mimeType });
-                } else if (imgUrl.startsWith('http')) {
-                    await sock.sendMessage(jid, { image: { url: imgUrl } });
-                }
-            } catch (imgErr) {
-                console.error(`Error sending image ${i + 1}:`, imgErr);
+    // Enviar imagens usando parseImageUrls (suporta JSON e newline)
+    const images = parseImageUrls(item.imageUrls);
+    for (let i = 0; i < images.length && i < 10; i++) {
+        try {
+            const imgUrl = images[i];
+            if (imgUrl.startsWith('data:')) {
+                // Imagem em Base64
+                const base64Data = imgUrl.split(',')[1];
+                const mimeType = imgUrl.split(';')[0].split(':')[1] || 'image/jpeg';
+                await sock.sendMessage(jid, { image: Buffer.from(base64Data, 'base64'), mimetype: mimeType });
+            } else if (imgUrl.startsWith('http')) {
+                // Imagem por URL
+                await sock.sendMessage(jid, { image: { url: imgUrl } });
             }
+        } catch (imgErr) {
+            console.error(`Error sending image ${i + 1}:`, imgErr);
         }
     }
 
@@ -290,7 +288,11 @@ export const sendItemWithImages = async (sock: any, jid: string, contactId: numb
     await sendAndLogText(sock, jid, contactId, text);
 };
 
-const formatItemMessage = (item: any) => {
+/**
+ * Formata a mensagem de texto de um item para exibição no WhatsApp.
+ * Exportada para que possa ser reutilizada no endpoint /ai-test do Treinar IA.
+ */
+export const formatItemMessage = (item: any) => {
     let out = `📌 *${item.title || item.name}*\n\n`;
     if (item.description) out += `${item.description}\n\n`;
     if (item.empresa) out += `🏢 Empresa: ${item.empresa}\n`;
