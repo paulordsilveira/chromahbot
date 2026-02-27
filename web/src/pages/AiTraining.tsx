@@ -16,6 +16,12 @@ export const AiTraining: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [started, setStarted] = useState(false);
 
+    // Estado de navegação do menu — sincronizado com o backend (aiTestHandler.ts)
+    // Armazena categoryId, subcategoryId para manter o contexto entre requisições.
+    const [sessionContext, setSessionContext] = useState<any>({
+        categoryId: null, subcategoryId: null, subcategoryIndex: null
+    });
+
     // Ref para auto-scroll até a última mensagem do chat
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -30,8 +36,11 @@ export const AiTraining: React.FC = () => {
         try {
             const { data } = await axios.post(`${API_URL}/ai-test`, {
                 message: '/bot-greeting',
-                history: []
+                history: [],
+                sessionContext: { categoryId: null, subcategoryId: null, subcategoryIndex: null }
             });
+            // Atualizar contexto de sessão retornado pelo backend
+            if (data.sessionContext) setSessionContext(data.sessionContext);
             if (data.responses && Array.isArray(data.responses)) {
                 const initialMsgs = data.responses.map((resp: any) => ({
                     role: 'assistant',
@@ -58,8 +67,12 @@ export const AiTraining: React.FC = () => {
         try {
             const { data } = await axios.post(`${API_URL}/ai-test`, {
                 message: userMsg,
-                history: messages // Passando histórico de contexto pra IA
+                history: messages,
+                sessionContext // Enviando contexto de navegação para o backend
             });
+
+            // Atualizar contexto de sessão retornado pelo backend
+            if (data.sessionContext) setSessionContext(data.sessionContext);
 
             // Fix 4: Atualiza state de mensagens em lote para evitar race condition
             if (data.responses && Array.isArray(data.responses)) {
@@ -87,7 +100,7 @@ export const AiTraining: React.FC = () => {
                     <p className="text-ch-muted">Teste como a IA responde sem enviar ao WhatsApp</p>
                 </div>
                 {messages.length > 0 && (
-                    <button onClick={() => { setMessages([]); setStarted(false); }} className="p-2 hover:bg-ch-surface-2 rounded-xl text-ch-muted hover:text-ch-magenta transition-colors" title="Limpar conversa">
+                    <button onClick={() => { setMessages([]); setStarted(false); setSessionContext({ categoryId: null, subcategoryId: null, subcategoryIndex: null }); }} className="p-2 hover:bg-ch-surface-2 rounded-xl text-ch-muted hover:text-ch-magenta transition-colors" title="Limpar conversa">
                         <Trash2 size={20} />
                     </button>
                 )}

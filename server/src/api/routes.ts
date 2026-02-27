@@ -1,10 +1,8 @@
-import { Router } from 'express';
+﻿import { Router } from 'express';
 import db from '../infrastructure/database';
 import aiService from '../infrastructure/AiService';
 import { connectToWhatsApp, disconnectWhatsApp } from '../bot/connection';
 import { TOOL_DEFINITIONS } from '../bot/modules/constants';
-import { formatItemMessage } from '../bot/modules/menuNavigation';
-import { parseImageUrls } from '../bot/modules/helpers';
 
 const router = Router();
 
@@ -119,7 +117,7 @@ router.put('/config', (req, res) => {
     );
 
     const config = db.prepare('SELECT * FROM config WHERE id = 1').get() as any;
-    console.log('[PUT /config] ✅ Salvo no banco:', {
+    console.log('[PUT /config] âœ… Salvo no banco:', {
       systemPrompt: config?.systemPrompt?.substring(0, 60) || '(vazio)',
       assistantContext: config?.assistantContext?.substring(0, 60) || '(vazio)',
       documentacao: config?.documentacao ? `${config.documentacao.length} chars` : '(vazio)',
@@ -540,12 +538,12 @@ router.post('/lead-tickets/:id/summarize', async (req, res) => {
 
     const conversationData = messages.map(m => `[${m.role === 'user' ? 'Cliente' : 'Assistente'}]: ${m.content}`).join('\n');
     const promptContext = ticket.summary
-      ? `HISTÓRICO DE RESUMO ANTERIOR:\n${ticket.summary}\n\n---\nNOVAS MENSAGENS PARA ATUALIZAR O RESUMO HISTÓRICO:\n${conversationData}`
+      ? `HISTÃ“RICO DE RESUMO ANTERIOR:\n${ticket.summary}\n\n---\nNOVAS MENSAGENS PARA ATUALIZAR O RESUMO HISTÃ“RICO:\n${conversationData}`
       : `CONVERSA:\n${conversationData}`;
 
-    const summaryPrompt = `Atue como um analista de dados de CRM. Sua tarefa é criar/atualizar um resumo conciso e em tópicos da conversa entre o cliente e o assistente a seguir.
-Caso exista um "HISTÓRICO DE RESUMO ANTERIOR", não repita do zero, mas crie uma pequena linha do tempo ou apenas adicione quais foram os últimos desdobramentos.
-O resumo não deve ter mais do que 4 frases ou tópicos curtos. Foco total em intenção de compra, dúvidas principais e status da tratativa.
+    const summaryPrompt = `Atue como um analista de dados de CRM. Sua tarefa Ã© criar/atualizar um resumo conciso e em tÃ³picos da conversa entre o cliente e o assistente a seguir.
+Caso exista um "HISTÃ“RICO DE RESUMO ANTERIOR", nÃ£o repita do zero, mas crie uma pequena linha do tempo ou apenas adicione quais foram os Ãºltimos desdobramentos.
+O resumo nÃ£o deve ter mais do que 4 frases ou tÃ³picos curtos. Foco total em intenÃ§Ã£o de compra, dÃºvidas principais e status da tratativa.
 Textos Fornecidos:
 ${promptContext}`;
 
@@ -725,70 +723,70 @@ router.post('/improve-text', async (req, res) => {
       return res.status(400).json({ error: 'text and fieldType are required' });
     }
 
-    // Buscar config atual para dar contexto à IA
+    // Buscar config atual para dar contexto Ã  IA
     const config = db.prepare('SELECT * FROM config WHERE id = 1').get() as any;
     const empresaNome = config?.welcomeMessage?.match(/\*(.*?)\*/)?.[1] || 'a empresa';
 
     const prompts: Record<string, string> = {
-      systemPrompt: `Você é um especialista em criar System Prompts para assistentes virtuais de WhatsApp empresariais.
+      systemPrompt: `VocÃª Ã© um especialista em criar System Prompts para assistentes virtuais de WhatsApp empresariais.
 
 TAREFA: Reescreva e melhore o System Prompt abaixo para que o assistente virtual funcione de forma otimizada.
 
 REGRAS DO SYSTEM PROMPT IDEAL:
-- Defina claramente o papel do assistente (quem ele é, qual empresa representa)
-- Estabeleça limites claros (o que pode e não pode fazer)
-- Defina o tom de comunicação (profissional, amigável, direto)
+- Defina claramente o papel do assistente (quem ele Ã©, qual empresa representa)
+- EstabeleÃ§a limites claros (o que pode e nÃ£o pode fazer)
+- Defina o tom de comunicaÃ§Ã£o (profissional, amigÃ¡vel, direto)
 - Inclua regras sobre quando encaminhar para atendimento humano
-- Mencione que deve usar as informações da documentação e FAQ para responder
-- Inclua regra para NUNCA inventar informações
+- Mencione que deve usar as informaÃ§Ãµes da documentaÃ§Ã£o e FAQ para responder
+- Inclua regra para NUNCA inventar informaÃ§Ãµes
 - Mantenha texto puro sem markdown
-- Retorne APENAS o System Prompt melhorado, sem explicações
+- Retorne APENAS o System Prompt melhorado, sem explicaÃ§Ãµes
 
-CONTEXTO: O assistente é da empresa "${empresaNome}".`,
+CONTEXTO: O assistente Ã© da empresa "${empresaNome}".`,
 
-      assistantContext: `Você é um especialista em design de personalidade e UX conversacional para chatbots de WhatsApp.
+      assistantContext: `VocÃª Ã© um especialista em design de personalidade e UX conversacional para chatbots de WhatsApp.
 
 TAREFA: Refine o contexto de personalidade abaixo para criar uma identidade conversacional marcante e consistente.
 
 O BOM CONTEXTO DE PERSONALIDADE DEVE TER:
 - Tom de voz definido (formal/informal/misto)
-- Estilo de comunicação (direto, detalhista, empático)
-- Uso de emojis (quando sim, quando não, exemplos)
+- Estilo de comunicaÃ§Ã£o (direto, detalhista, empÃ¡tico)
+- Uso de emojis (quando sim, quando nÃ£o, exemplos)
 - Comprimento ideal das respostas  
-- Como lidar com reclamações e frustrações
+- Como lidar com reclamaÃ§Ãµes e frustraÃ§Ãµes
 - Como saudar e se despedir
-- Palavras e expressões que deve/não deve usar
+- Palavras e expressÃµes que deve/nÃ£o deve usar
 - Mantenha texto puro sem markdown
-- Retorne APENAS o contexto melhorado, sem explicações
+- Retorne APENAS o contexto melhorado, sem explicaÃ§Ãµes
 
-CONTEXTO: O assistente é da empresa "${empresaNome}".`,
+CONTEXTO: O assistente Ã© da empresa "${empresaNome}".`,
 
-      documentacao: `Você é um especialista em organização de conhecimento para bases de IA (RAG/Knowledge Base).
+      documentacao: `VocÃª Ã© um especialista em organizaÃ§Ã£o de conhecimento para bases de IA (RAG/Knowledge Base).
 
-TAREFA: Reorganize e melhore a documentação abaixo para que um assistente de IA consiga extrair informações rapidamente e responder perguntas dos clientes com precisão.
+TAREFA: Reorganize e melhore a documentaÃ§Ã£o abaixo para que um assistente de IA consiga extrair informaÃ§Ãµes rapidamente e responder perguntas dos clientes com precisÃ£o.
 
-A DOCUMENTAÇÃO OTIMIZADA PARA IA DEVE:
-- Organizar em seções temáticas claras (Sobre a Empresa, Serviços, Diferenciais, Processos, Horários, Contato)
-- Cada seção com tópicos objetivos
-- Incluir dados específicos (preços, prazos, condições) quando presentes
-- Eliminar redundâncias
-- Usar marcadores (• ou -) para listas
+A DOCUMENTAÃ‡ÃƒO OTIMIZADA PARA IA DEVE:
+- Organizar em seÃ§Ãµes temÃ¡ticas claras (Sobre a Empresa, ServiÃ§os, Diferenciais, Processos, HorÃ¡rios, Contato)
+- Cada seÃ§Ã£o com tÃ³picos objetivos
+- Incluir dados especÃ­ficos (preÃ§os, prazos, condiÃ§Ãµes) quando presentes
+- Eliminar redundÃ¢ncias
+- Usar marcadores (â€¢ ou -) para listas
 - Usar * para negritar termos importantes
 - Manter linguagem clara e direta
-- Retorne APENAS a documentação melhorada, sem explicações`,
+- Retorne APENAS a documentaÃ§Ã£o melhorada, sem explicaÃ§Ãµes`,
 
-      faqText: `Você é um especialista em FAQ (Perguntas Frequentes) otimizado para WhatsApp.
+      faqText: `VocÃª Ã© um especialista em FAQ (Perguntas Frequentes) otimizado para WhatsApp.
 
-TAREFA: Reescreva e organize o FAQ abaixo para máxima clareza quando enviado via WhatsApp.
+TAREFA: Reescreva e organize o FAQ abaixo para mÃ¡xima clareza quando enviado via WhatsApp.
 
 O FAQ IDEAL PARA WHATSAPP DEVE:
-- Cada pergunta começar com 📌 em negrito (*pergunta*)
-- Resposta logo abaixo, clara e concisa (2-3 linhas máx)
-- Usar emojis relevantes (✅ ❓ 📍 ⏰ 💰 📞 🔗)
+- Cada pergunta comeÃ§ar com ðŸ“Œ em negrito (*pergunta*)
+- Resposta logo abaixo, clara e concisa (2-3 linhas mÃ¡x)
+- Usar emojis relevantes (âœ… â“ ðŸ“ â° ðŸ’° ðŸ“ž ðŸ”—)
 - Separar perguntas com linha em branco
 - Agrupar por tema se houver muitas perguntas
-- Incluir ao final: "Não encontrou sua dúvida? Digite *CONTATO* para falar com um atendente."
-- Retorne APENAS o FAQ melhorado, sem explicações`
+- Incluir ao final: "NÃ£o encontrou sua dÃºvida? Digite *CONTATO* para falar com um atendente."
+- Retorne APENAS o FAQ melhorado, sem explicaÃ§Ãµes`
     };
 
     const systemInstruction = prompts[fieldType] || prompts.documentacao;
@@ -803,7 +801,7 @@ O FAQ IDEAL PARA WHATSAPP DEVE:
 
 
 // ==========================================
-// CRUD: Custom Commands (Comandos Dinâmicos do Operador)
+// CRUD: Custom Commands (Comandos DinÃ¢micos do Operador)
 // ==========================================
 
 router.get('/commands', (_req, res) => {
@@ -818,7 +816,7 @@ router.get('/commands', (_req, res) => {
 router.post('/commands', (req, res) => {
   try {
     const { triggers, textMessage, fileData, isActive, linkedSubcategoryId, linkedItemId } = req.body;
-    if (!triggers) return res.status(400).json({ error: 'Triggers (palavras de comando) são obrigatórios.' });
+    if (!triggers) return res.status(400).json({ error: 'Triggers (palavras de comando) sÃ£o obrigatÃ³rios.' });
 
     const activeVal = isActive === undefined ? 1 : (isActive ? 1 : 0);
     const stmt = db.prepare('INSERT INTO custom_command (triggers, textMessage, fileData, isActive, linkedSubcategoryId, linkedItemId) VALUES (?, ?, ?, ?, ?, ?)');
@@ -835,7 +833,7 @@ router.put('/commands/:id', (req, res) => {
   try {
     const { id } = req.params;
     const { triggers, textMessage, fileData, isActive, linkedSubcategoryId, linkedItemId } = req.body;
-    if (!triggers) return res.status(400).json({ error: 'Triggers são obrigatórios.' });
+    if (!triggers) return res.status(400).json({ error: 'Triggers sÃ£o obrigatÃ³rios.' });
 
     const activeVal = isActive === undefined ? 1 : (isActive ? 1 : 0);
     const stmt = db.prepare('UPDATE custom_command SET triggers = ?, textMessage = ?, fileData = ?, isActive = ?, linkedSubcategoryId = ?, linkedItemId = ? WHERE id = ?');
@@ -926,7 +924,7 @@ router.get('/tags', (_req, res) => {
 router.post('/tags', (req, res) => {
   try {
     const { name, color } = req.body;
-    if (!name) return res.status(400).json({ error: 'Nome obrigatório' });
+    if (!name) return res.status(400).json({ error: 'Nome obrigatÃ³rio' });
     const result = db.prepare('INSERT INTO tag (name, color) VALUES (?, ?)').run(name, color || '#00bcd4');
     res.json({ id: result.lastInsertRowid, name, color: color || '#00bcd4' });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -985,7 +983,7 @@ router.get('/quick-replies', (_req, res) => {
 router.post('/quick-replies', (req, res) => {
   try {
     const { shortcut, title, content, category } = req.body;
-    if (!shortcut || !title || !content) return res.status(400).json({ error: 'shortcut, title e content são obrigatórios' });
+    if (!shortcut || !title || !content) return res.status(400).json({ error: 'shortcut, title e content sÃ£o obrigatÃ³rios' });
     const result = db.prepare('INSERT INTO quick_reply (shortcut, title, content, category) VALUES (?, ?, ?, ?)').run(shortcut, title, content, category || 'geral');
     res.json({ id: result.lastInsertRowid, shortcut, title, content, category: category || 'geral' });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -1023,7 +1021,7 @@ router.get('/scheduled-messages', (_req, res) => {
 router.post('/scheduled-messages', (req, res) => {
   try {
     const { contactId, targetJid, message, scheduledAt, isBroadcast, broadcastTagId } = req.body;
-    if (!message || !scheduledAt) return res.status(400).json({ error: 'message e scheduledAt são obrigatórios' });
+    if (!message || !scheduledAt) return res.status(400).json({ error: 'message e scheduledAt sÃ£o obrigatÃ³rios' });
     const result = db.prepare(`
       INSERT INTO scheduled_message (contactId, targetJid, message, scheduledAt, isBroadcast, broadcastTagId) VALUES (?, ?, ?, ?, ?, ?)
     `).run(contactId || null, targetJid || null, message, scheduledAt, isBroadcast ? 1 : 0, broadcastTagId || null);
@@ -1039,127 +1037,10 @@ router.delete('/scheduled-messages/:id', (req, res) => {
 });
 
 // ===================== AI Training Mode =====================
-
-router.post('/ai-test', async (req, res) => {
-  try {
-    const { message, history } = req.body;
-    if (!message) return res.status(400).json({ error: 'message é obrigatório' });
-
-    // --- COMANDO ESPECIAL: SIMULAR SAUDAÇÃO INICIAL DO WHATSAPP ---
-    if (message === '/bot-greeting') {
-      const config = db.prepare('SELECT welcomeMessage, logoImage FROM config WHERE id = 1').get() as any;
-      const text = config?.welcomeMessage || `Olá, Cliente! Tudo bem? Em que posso te ajudar? 😊`;
-      const images: string[] = [];
-
-      // Se tiver imagem (Base64) salva na configuração geral da empresa, adiciona ao display
-      if (config?.logoImage && config.logoImage.startsWith('data:image')) {
-        images.push(config.logoImage);
-      }
-
-      return res.json({
-        responses: [
-          {
-            type: 'text',
-            content: text,
-            images: images.length > 0 ? images : undefined
-          }
-        ]
-      });
-    }
-    // -------------------------------------------------------------
-
-    // history from frontend is mapped to { role, content }
-    const safeHistory = Array.isArray(history) ? history.map((h: any) => ({
-      role: h.role === 'user' ? 'user' : 'assistant',
-      content: h.content || ''
-    })) : [];
-
-    // Chama a IA incluindo as definições de tools e o histórico
-    const result = await aiService.getAiResponseWithTools(message, TOOL_DEFINITIONS, safeHistory);
-
-    // Array que armazenará todas as mensagens/ações resultantes simuladas
-    const responseMessages: any[] = [];
-
-    if (result.text) {
-      responseMessages.push({ type: 'text', content: result.text });
-    }
-
-    // Simula as tools interceptadas
-    if (result.toolCalls && result.toolCalls.length > 0) {
-      for (const tc of result.toolCalls) {
-        if (tc.name === 'enviar_menu_principal') {
-          const categories = db.prepare('SELECT * FROM category ORDER BY "order" ASC').all() as any[];
-          const menuText = categories.map((c, i) => `${i + 1}. ${c.emoji || ''} *${c.name}*`).join('\n');
-          responseMessages.push({ type: 'text', content: `(Simulação do Bot)\nVeja nossas opções:\n\n${menuText}\n\nDigite o número ou o nome da opção desejada.` });
-        } else if (tc.name === 'mostrar_categoria') {
-          const catName = tc.args.nome_categoria || '';
-          const cat = db.prepare('SELECT * FROM category WHERE LOWER(name) LIKE ?').get(`%${catName.toLowerCase()}%`) as any;
-          if (cat) {
-            const subcategories = db.prepare('SELECT * FROM subcategory WHERE categoryId = ? AND enabledInBot = 1 ORDER BY "order" ASC').all(cat.id) as any[];
-            if (subcategories.length > 0) {
-              const subsText = subcategories.map((s, i) => `${i + 1}. ${s.emoji || ''} *${s.name}*`).join('\n');
-              responseMessages.push({ type: 'text', content: `(Simulação do Bot)\nOpções em *${cat.name}*:\n\n${subsText}` });
-            } else {
-              responseMessages.push({ type: 'text', content: `A categoria *${cat.name}* não possui opções no momento.` });
-            }
-          } else {
-            responseMessages.push({ type: 'text', content: `Não encontrei a categoria "${catName}".` });
-          }
-        } else if (tc.name === 'mostrar_subcategoria') {
-          const subName = tc.args.nome_subcategoria || '';
-          const sub = db.prepare('SELECT s.*, c.name as catName FROM subcategory s JOIN category c ON s.categoryId = c.id WHERE s.enabledInBot = 1 AND LOWER(s.name) LIKE ?').get(`%${subName.toLowerCase()}%`) as any;
-          if (sub) {
-            const items = db.prepare('SELECT * FROM item WHERE subcategoryId = ? AND enabled = 1 ORDER BY id ASC').all(sub.id) as any[];
-            if (items.length > 0) {
-              const itemsText = items.map((item, i) => `${i + 1}. *${item.name}*`).join('\n');
-              responseMessages.push({ type: 'text', content: `(Simulação do Bot)\nOpções para *${sub.name}*:\n\n${itemsText}` });
-            } else {
-              responseMessages.push({ type: 'text', content: `Nenhuma opção encontrada para *${sub.name}*.` });
-            }
-          } else {
-            responseMessages.push({ type: 'text', content: `Não encontrei a subcategoria "${subName}".` });
-          }
-        } else if (tc.name === 'mostrar_item') {
-          // Fix 9: Reutiliza formatItemMessage e parseImageUrls para manter
-          // consistência entre o WhatsApp real e o Treinar IA.
-          const itemName = tc.args.nome_item || '';
-          const item = db.prepare('SELECT * FROM item WHERE enabled = 1 AND LOWER(name) LIKE ?').get(`%${itemName.toLowerCase()}%`) as any;
-          if (item) {
-            const text = formatItemMessage(item);
-            const images = parseImageUrls(item.imageUrls);
-
-            responseMessages.push({
-              type: 'item',
-              content: text,
-              images: images.length > 0 ? images : undefined
-            });
-          } else {
-            responseMessages.push({ type: 'text', content: `Não encontrei o item "${itemName}".` });
-          }
-        } else if (tc.name === 'iniciar_formulario') {
-          const tipo = tc.args.tipo;
-          responseMessages.push({ type: 'text', content: `[Simulação da Tool]\nIniciando formulário interactivo do tipo: *${tipo}*\n(No WhatsApp real, o bot começaria a fazer as perguntas passo a passo).` });
-        } else if (tc.name === 'enviar_contato_humano') {
-          const config = db.prepare('SELECT contatoHumano FROM config WHERE id = 1').get() as any;
-          responseMessages.push({ type: 'text', content: `(Simulação do Bot)\nVou te passar o contato de um atendente humano agora mesmo! 👨‍💼\n\nContato: ${config?.contatoHumano || 'Não configurado'}` });
-        } else if (tc.name === 'enviar_faq') {
-          const config = db.prepare('SELECT faqText FROM config WHERE id = 1').get() as any;
-          responseMessages.push({ type: 'text', content: `(Simulação do Bot)\n*Dúvidas Frequentes:*\n\n${config?.faqText || 'Nenhum FAQ cadastrado.'}` });
-        }
-      }
-    }
-
-    // Se a IA não gerou texto nem chamou tools, falha segura
-    if (responseMessages.length === 0) {
-      responseMessages.push({ type: 'text', content: 'Desculpe, ocorreu um erro ao simular a resposta ou a IA não retornou nada.' });
-    }
-
-    res.json({ responses: responseMessages });
-  } catch (err: any) {
-    console.error('POST /ai-test error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
+// O handler completo foi extraído para aiTestHandler.ts para replicar
+// o fluxo EXATO do flow.ts (menu, navegação, saudação, IA + Function Calling).
+import { handleAiTest } from './aiTestHandler';
+router.post('/ai-test', handleAiTest);
 
 // ===================== Export Data =====================
 
@@ -1193,7 +1074,7 @@ router.get('/export/:type', (req, res) => {
         filename = 'leads';
         break;
       default:
-        return res.status(400).json({ error: 'Tipo inválido. Use: contacts, messages, forms, leads' });
+        return res.status(400).json({ error: 'Tipo invÃ¡lido. Use: contacts, messages, forms, leads' });
     }
 
     if (format === 'csv') {
