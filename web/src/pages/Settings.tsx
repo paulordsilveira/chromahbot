@@ -74,11 +74,72 @@ export const Settings: React.FC = () => {
   const [showFaqModal, setShowFaqModal] = useState<boolean>(false);
   const [showPromptModal, setShowPromptModal] = useState<boolean>(false);
   const [showContextModal, setShowContextModal] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'bot' | 'ia' | 'cerebro'>('bot');
+  const [activeTab, setActiveTab] = useState<'bot' | 'ia' | 'cerebro' | 'leads_tickets'>('bot');
   const [openRouterModels, setOpenRouterModels] = useState(PROVIDER_MODELS.openrouter);
   const [fetchingModels, setFetchingModels] = useState(false);
   const [improving, setImproving] = useState(false);
   const [improvingField, setImprovingField] = useState<string | null>(null);
+
+  const [leadStatuses, setLeadStatuses] = useState<any[]>([]);
+  const [newStatusName, setNewStatusName] = useState('');
+  const [newStatusColor, setNewStatusColor] = useState('bg-ch-cyan/20 text-ch-cyan');
+  const [addingStatus, setAddingStatus] = useState(false);
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+
+  const fetchLeadStatuses = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/lead-status`);
+      setLeadStatuses(res.data || []);
+    } catch (e) {
+      console.error('Falha ao carregar statuses:', e);
+    }
+  };
+
+  const handleAddStatus = async () => {
+    if (!newStatusName.trim()) return;
+    try {
+      setAddingStatus(true);
+      const { data } = await axios.post(`${API_URL}/lead-status`, { name: newStatusName, color: newStatusColor });
+      setLeadStatuses(prev => [...prev, data]);
+      setNewStatusName('');
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao criar status');
+    } finally {
+      setAddingStatus(false);
+    }
+  };
+
+  const handleDeleteStatus = async (id: number) => {
+    if (!confirm('Deseja excluir este status? Tickets usando ele voltarão a ser "Pendente"')) return;
+    try {
+      await axios.delete(`${API_URL}/lead-status/${id}`);
+      setLeadStatuses(prev => prev.filter(s => s.id !== id));
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao excluir status');
+    }
+  };
+
+  const handleDragStart = (index: number) => setDraggingIndex(index);
+  const handleDragEnter = (index: number) => {
+    if (draggingIndex === null || draggingIndex === index) return;
+    const newStatuses = [...leadStatuses];
+    const item = newStatuses[draggingIndex];
+    newStatuses.splice(draggingIndex, 1);
+    newStatuses.splice(index, 0, item);
+    setDraggingIndex(index);
+    setLeadStatuses(newStatuses);
+  };
+  const handleDragEnd = async () => {
+    setDraggingIndex(null);
+    try {
+      const orderedIds = leadStatuses.map(s => s.id);
+      await axios.put(`${API_URL}/lead-status/reorder`, { orderedIds });
+    } catch (e) {
+      console.error('Failed to reorder', e);
+    }
+  };
 
   const fetchFreeModels = async () => {
     try {
@@ -109,6 +170,7 @@ export const Settings: React.FC = () => {
         setError(null);
         const { data } = await axios.get(`${API_URL}/config`);
         setConfig(data ?? {});
+        await fetchLeadStatuses();
       } catch (e) {
         setError('Falha ao carregar configurações.');
       } finally {
@@ -232,6 +294,7 @@ export const Settings: React.FC = () => {
           { key: 'bot' as const, icon: Bot, label: 'Bot' },
           { key: 'ia' as const, icon: Cpu, label: 'IA (Provedores)' },
           { key: 'cerebro' as const, icon: BrainCircuit, label: 'Cérebro IA' },
+          { key: 'leads_tickets' as const, icon: MessageSquare, label: 'Leads & Tickets' },
         ].map(tab => (
           <button
             key={tab.key}
@@ -670,6 +733,90 @@ export const Settings: React.FC = () => {
                   <p className="text-sm text-ch-muted">Perguntas comuns enviadas diretamente para o chat do WhatsApp.</p>
                   <span className="inline-block mt-4 text-xs font-bold text-ch-purple group-hover:underline">Clique para editar →</span>
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'leads_tickets' && (
+          <div className="p-6 md:p-8 space-y-8">
+            <h3 className="text-xl font-bold flex items-center gap-2 mb-6 text-ch-cyan">
+              <MessageSquare size={24} /> Gerenciar Status de Leads
+            </h3>
+
+            <p className="text-ch-muted mb-4">
+              Crie, reordene (arraste) e defina cores para os status do quadro de Leads & Tickets.
+              <br />Nota: "Finalizado" (ou "closed") e "Atendido" (ou "attended") acionam automações com o CRM.
+            </p>
+
+            <div className="bg-ch-surface-2 p-6 rounded-2xl border border-ch-border space-y-4">
+              <div className="flex flex-col md:flex-row gap-4 items-end">
+                <div className="flex-1 space-y-1">
+                  <label className="text-sm font-bold text-ch-muted uppercase">Nome do Novo Status</label>
+                  <input
+                    value={newStatusName}
+                    onChange={e => setNewStatusName(e.target.value)}
+                    placeholder="Ex: Em Análise"
+                    className="w-full bg-ch-surface border border-ch-border rounded-lg p-3 outline-none focus:ring-2 focus:ring-ch-cyan/50 text-ch-text"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-bold text-ch-muted uppercase">Cor / Estilo</label>
+                  <select
+                    value={newStatusColor}
+                    onChange={e => setNewStatusColor(e.target.value)}
+                    className="w-full md:w-48 bg-ch-surface border border-ch-border rounded-lg p-3 outline-none focus:ring-2 focus:ring-ch-cyan/50 text-ch-text"
+                  >
+                    <option value="bg-ch-cyan/20 text-ch-cyan">Ciano (Padrão)</option>
+                    <option value="bg-blue-500/20 text-blue-400">Azul</option>
+                    <option value="bg-ch-green/20 text-ch-green">Verde</option>
+                    <option value="bg-ch-yellow/20 text-ch-yellow">Amarelo</option>
+                    <option value="bg-orange-500/20 text-orange-400">Laranja</option>
+                    <option value="bg-ch-magenta/20 text-ch-magenta">Magenta / Vermelho</option>
+                    <option value="bg-ch-purple/20 text-ch-purple">Roxo</option>
+                    <option value="bg-ch-surface border border-ch-border text-ch-text">Neutro</option>
+                  </select>
+                </div>
+                <button
+                  onClick={handleAddStatus}
+                  disabled={addingStatus || !newStatusName.trim()}
+                  className="gradient-btn px-6 py-3 rounded-lg text-ch-bg font-bold disabled:opacity-50 min-w-32"
+                >
+                  {addingStatus ? 'Criando...' : 'Adicionar'}
+                </button>
+              </div>
+
+              <div className="mt-8 space-y-2 pt-6 border-t border-ch-border">
+                {leadStatuses.map((status, idx) => (
+                  <div
+                    key={status.id}
+                    draggable
+                    onDragStart={() => handleDragStart(idx)}
+                    onDragEnter={() => handleDragEnter(idx)}
+                    onDragEnd={handleDragEnd}
+                    onDragOver={e => e.preventDefault()}
+                    className={`flex items-center justify-between p-4 bg-ch-surface border border-ch-border rounded-xl cursor-move transition-all ${draggingIndex === idx ? 'opacity-50 scale-95 border-ch-cyan' : 'hover:border-ch-cyan/30'}`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="text-ch-muted/50 cursor-move" title="Arraste para reordenar">☰</div>
+                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${status.color}`}>
+                        {status.name}
+                      </span>
+                    </div>
+                    {(status.name !== 'Pendente') && (
+                      <button
+                        onClick={() => handleDeleteStatus(status.id)}
+                        className="text-ch-magenta hover:bg-ch-magenta/10 p-2 rounded-lg transition-colors"
+                        title="Excluir"
+                      >
+                        <X size={18} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {leadStatuses.length === 0 && (
+                  <p className="text-ch-muted text-center py-4">Nenhum status configurado.</p>
+                )}
               </div>
             </div>
           </div>

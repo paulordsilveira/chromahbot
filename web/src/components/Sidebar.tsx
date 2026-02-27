@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, List, Settings, MessageSquare, FileText, Menu, X, Briefcase, Zap, Brain, Calendar, Send } from 'lucide-react';
+import { LayoutDashboard, List, Settings, MessageSquare, FileText, Menu, X, Briefcase, Zap, Brain, Calendar, Send, Smartphone } from 'lucide-react';
 import axios from 'axios';
 
 const API_URL = 'http://localhost:3020/api';
@@ -21,10 +21,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
 
     const navItems = [
         { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
+        { path: '/conexao', icon: Smartphone, label: 'Conexão' },
         { path: '/categorias', icon: List, label: 'Categorias' },
         { path: '/crm', icon: Briefcase, label: 'CRM' },
         { path: '/formularios', icon: FileText, label: 'Formulários' },
-        { path: '/leads', icon: MessageSquare, label: 'WhatsApp' },
+        { path: '/leads', icon: MessageSquare, label: 'Leads & Tickets' },
         { path: '/comandos', icon: Zap, label: 'Comandos' },
         { path: '/respostas-rapidas', icon: Send, label: 'Respostas Rápidas' },
         { path: '/agendamento', icon: Calendar, label: 'Agendamento' },

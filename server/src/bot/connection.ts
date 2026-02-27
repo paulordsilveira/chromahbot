@@ -9,13 +9,14 @@ import { Boom } from '@hapi/boom';
 import P from 'pino';
 import eventBus from '../infrastructure/EventBus';
 import path from 'path';
-import './flow'; // Import to register listeners
+import fs from 'fs';
+import { handleMessage } from './flow'; // Import to register listeners
 
 const AUTH_FOLDER = path.resolve(__dirname, '../../auth_info');
 
 let currentSock: any = null;
 
-async function connectToWhatsApp() {
+export async function connectToWhatsApp() {
     // Limpar sock anterior para evitar listeners duplicados
     if (currentSock) {
         try {
@@ -62,6 +63,14 @@ async function connectToWhatsApp() {
 
             if (shouldReconnect) {
                 connectToWhatsApp();
+            } else {
+                // If it's a permanent disconnect (e.g. 401 logged out), clean auth folder
+                try {
+                    fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
+                } catch (e) {
+                    console.error('Failed to remove auth folder on logout', e);
+                }
+                currentSock = null;
             }
         } else if (connection === 'open') {
             console.log('Successfully opened connection!');
@@ -93,7 +102,8 @@ async function connectToWhatsApp() {
     sock.ev.on('messages.upsert', async m => {
         if (m.type === 'notify') {
             for (const msg of m.messages) {
-                eventBus.emit('message.received', { msg, sock });
+                // Direct call to flow.ts to avoid EventBus payload issues
+                await handleMessage(msg, sock);
             }
         }
     });
@@ -101,6 +111,25 @@ async function connectToWhatsApp() {
     return sock;
 }
 
-// Start connection
-connectToWhatsApp();
+export async function disconnectWhatsApp() {
+    if (currentSock) {
+        try {
+            await currentSock.logout();
+        } catch (e) {
+            console.error('Error during logout:', e);
+        }
+    }
 
+    try {
+        fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
+    } catch (e) {
+        console.error('Failed to clear auth folder during disconnect', e);
+    }
+
+    currentSock = null;
+    eventBus.emit('bot.log', 'Manual disconnect triggered.');
+    eventBus.emit('bot.status', 'disconnected');
+}
+
+// Start connection on init
+connectToWhatsApp();

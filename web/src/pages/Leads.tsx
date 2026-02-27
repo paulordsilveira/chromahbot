@@ -8,7 +8,7 @@ type LeadTicket = {
   id: number;
   contactId: number;
   type: 'lead' | 'atendimento';
-  status: 'pending' | 'attended' | 'closed';
+  status: string;
   summary?: string;
   notifiedAt: string;
   attendedAt?: string;
@@ -36,7 +36,7 @@ type Contact = {
 };
 
 type Tab = 'tickets' | 'contacts';
-type TicketFilter = 'all' | 'pending' | 'attended' | 'closed';
+type TicketFilter = string;
 
 export const Leads: React.FC = () => {
   const [tickets, setTickets] = useState<LeadTicket[]>([]);
@@ -47,18 +47,22 @@ export const Leads: React.FC = () => {
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<Tab>('tickets');
   const [ticketFilter, setTicketFilter] = useState<TicketFilter>('all');
+  const [leadStatuses, setLeadStatuses] = useState<any[]>([]);
+  const [summarizingId, setSummarizingId] = useState<number | null>(null);
 
   useEffect(() => {
     const run = async () => {
       try {
         setLoading(true);
         setError(null);
-        const [ticketsRes, contactsRes] = await Promise.all([
+        const [ticketsRes, contactsRes, statusesRes] = await Promise.all([
           axios.get(`${API_URL}/lead-tickets`),
           axios.get(`${API_URL}/contacts`),
+          axios.get(`${API_URL}/lead-status`)
         ]);
         setTickets(Array.isArray(ticketsRes.data) ? ticketsRes.data : []);
         setContacts(Array.isArray(contactsRes.data) ? contactsRes.data : []);
+        setLeadStatuses(Array.isArray(statusesRes.data) ? statusesRes.data : []);
       } catch (e) {
         setError('Falha ao carregar dados.');
       } finally {
@@ -76,9 +80,21 @@ export const Leads: React.FC = () => {
   const updateTicketStatus = async (ticketId: number, status: string) => {
     try {
       await axios.put(`${API_URL}/lead-tickets/${ticketId}/status`, { status });
-      setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status: status as any, attendedAt: new Date().toISOString() } : t));
+      setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status, ...(status === 'Atendido' || status === 'Finalizado' ? { attendedAt: new Date().toISOString() } : {}) } : t));
     } catch (e) {
       setError('Falha ao atualizar status.');
+    }
+  };
+
+  const handleSummarize = async (ticketId: number) => {
+    try {
+      setSummarizingId(ticketId);
+      const res = await axios.post(`${API_URL}/lead-tickets/${ticketId}/summarize`);
+      setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, summary: res.data.summary } : t));
+    } catch (e: any) {
+      alert(e.response?.data?.error || 'Erro ao gerar resumo');
+    } finally {
+      setSummarizingId(null);
     }
   };
 
@@ -108,18 +124,30 @@ export const Leads: React.FC = () => {
     );
   });
 
-  const pendingCount = tickets.filter(t => t.status === 'pending').length;
+  const pendingCount = tickets.filter(t => t.status === 'Pendente' || t.status === 'pending').length;
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
+  const getStatusBadge = (statusName: string) => {
+    const found = leadStatuses.find(s => s.name === statusName);
+    if (found) {
+      return (
+        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border border-current/20 ${found.color}`}>
+          <div className="w-1.5 h-1.5 rounded-full bg-current opacity-70"></div> {found.name}
+        </span>
+      );
+    }
+    // Fallbacks for legacy/default
+    switch (statusName?.toLowerCase()) {
+      case 'pendente':
       case 'pending':
         return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/15 text-amber-400 border border-amber-500/20"><Clock size={12} /> Pendente</span>;
+      case 'atendido':
       case 'attended':
         return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-ch-cyan/15 text-ch-cyan border border-ch-cyan/20"><CheckCircle size={12} /> Atendido</span>;
+      case 'finalizado':
       case 'closed':
         return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-ch-muted/15 text-ch-muted border border-ch-border"><XCircle size={12} /> Finalizado</span>;
       default:
-        return null;
+        return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-ch-surface-2 text-ch-text border border-ch-border">{statusName}</span>;
     }
   };
 
@@ -154,8 +182,8 @@ export const Leads: React.FC = () => {
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
             className={`px-5 py-3 font-medium text-sm flex items-center gap-2 transition-colors border-b-2 whitespace-nowrap ${activeTab === tab.key
-                ? 'border-ch-cyan text-ch-cyan'
-                : 'border-transparent text-ch-muted hover:text-ch-text'
+              ? 'border-ch-cyan text-ch-cyan'
+              : 'border-transparent text-ch-muted hover:text-ch-text'
               }`}
           >
             <tab.icon size={16} />
@@ -175,18 +203,27 @@ export const Leads: React.FC = () => {
           className="flex-1 bg-ch-surface-2 border border-ch-border rounded-xl p-3 focus:ring-2 focus:ring-ch-cyan/50 focus:border-ch-cyan text-ch-text placeholder-ch-muted outline-none transition-all"
         />
         {activeTab === 'tickets' && (
-          <div className="flex items-center gap-1 bg-ch-surface-2 border border-ch-border rounded-xl p-1">
-            <Filter size={14} className="text-ch-muted ml-2" />
-            {(['all', 'pending', 'attended', 'closed'] as TicketFilter[]).map(f => (
+          <div className="flex items-center gap-1 bg-ch-surface-2 border border-ch-border rounded-xl p-1 overflow-x-auto no-scrollbar max-w-full">
+            <Filter size={14} className="text-ch-muted ml-2 flex-shrink-0" />
+            <button
+              onClick={() => setTicketFilter('all')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-shrink-0 whitespace-nowrap ${ticketFilter === 'all'
+                ? 'bg-ch-cyan/20 text-ch-cyan'
+                : 'text-ch-muted hover:text-ch-text'
+                }`}
+            >
+              Todos
+            </button>
+            {leadStatuses.map(f => (
               <button
-                key={f}
-                onClick={() => setTicketFilter(f)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${ticketFilter === f
-                    ? 'bg-ch-cyan/20 text-ch-cyan'
-                    : 'text-ch-muted hover:text-ch-text'
+                key={f.id}
+                onClick={() => setTicketFilter(f.name)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-shrink-0 whitespace-nowrap ${ticketFilter === f.name
+                  ? 'bg-ch-cyan/20 text-ch-cyan'
+                  : 'text-ch-muted hover:text-ch-text'
                   }`}
               >
-                {f === 'all' ? 'Todos' : f === 'pending' ? 'Pendentes' : f === 'attended' ? 'Atendidos' : 'Finalizados'}
+                {f.name}
               </button>
             ))}
           </div>
@@ -258,34 +295,38 @@ export const Leads: React.FC = () => {
                         </div>
                       </div>
                     )}
-                    <div className="flex gap-2 flex-wrap">
-                      {ticket.status === 'pending' && (
-                        <>
-                          <button
-                            onClick={() => updateTicketStatus(ticket.id, 'attended')}
-                            className="px-4 py-2 bg-ch-cyan/20 text-ch-cyan rounded-lg text-sm font-bold hover:bg-ch-cyan/30 transition-colors flex items-center gap-1"
-                          >
-                            <CheckCircle size={14} /> Marcar como Atendido
-                          </button>
-                          <button
-                            onClick={() => updateTicketStatus(ticket.id, 'closed')}
-                            className="px-4 py-2 bg-ch-muted/10 text-ch-muted rounded-lg text-sm font-medium hover:bg-ch-muted/20 transition-colors flex items-center gap-1"
-                          >
-                            <XCircle size={14} /> Finalizar
-                          </button>
-                        </>
-                      )}
-                      {ticket.status === 'attended' && (
-                        <button
-                          onClick={() => updateTicketStatus(ticket.id, 'closed')}
-                          className="px-4 py-2 bg-ch-muted/10 text-ch-muted rounded-lg text-sm font-medium hover:bg-ch-muted/20 transition-colors flex items-center gap-1"
+                    <div className="flex gap-4 flex-wrap items-center mt-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-ch-muted uppercase">Alterar Status:</span>
+                        <select
+                          value={ticket.status}
+                          onChange={(e) => updateTicketStatus(ticket.id, e.target.value)}
+                          className="bg-ch-surface p-2 rounded-lg text-sm text-ch-text border border-ch-border focus:ring-2 focus:ring-ch-cyan/50 outline-none"
                         >
-                          <XCircle size={14} /> Finalizar
-                        </button>
-                      )}
-                      {ticket.status === 'closed' && (
-                        <span className="text-xs text-ch-muted">
-                          Finalizado em {ticket.attendedAt ? new Date(ticket.attendedAt).toLocaleString('pt-BR') : '-'}
+                          {leadStatuses.map(s => (
+                            <option key={s.id} value={s.name}>{s.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="w-px h-6 bg-ch-border hidden sm:block"></div>
+
+                      <button
+                        onClick={() => handleSummarize(ticket.id)}
+                        disabled={summarizingId === ticket.id}
+                        className="px-4 py-2 bg-gradient-to-br from-ch-purple/20 to-ch-magenta/20 border border-ch-purple/30 text-ch-text hover:from-ch-purple/30 hover:to-ch-magenta/30 rounded-lg text-sm font-bold transition-all flex items-center gap-2 disabled:opacity-50"
+                      >
+                        {summarizingId === ticket.id ? (
+                          <div className="animate-spin h-4 w-4 border-2 border-ch-purple/30 border-b-ch-purple rounded-full"></div>
+                        ) : (
+                          <span className="text-ch-purple">✨</span>
+                        )}
+                        {summarizingId === ticket.id ? 'Resumindo...' : 'Resumir com IA'}
+                      </button>
+
+                      {ticket.attendedAt && (
+                        <span className="text-xs text-ch-muted ml-auto hidden sm:block">
+                          Última interação concluída em: {new Date(ticket.attendedAt).toLocaleString('pt-BR')}
                         </span>
                       )}
                     </div>

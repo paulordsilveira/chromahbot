@@ -141,7 +141,33 @@ db.exec(`
     attendedAt TEXT,
     FOREIGN KEY (contactId) REFERENCES contact(id)
   );
+
+  CREATE TABLE IF NOT EXISTS lead_ticket_status (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    color TEXT DEFAULT 'bg-ch-cyan/20 text-ch-cyan',
+    "order" INTEGER DEFAULT 0
+  );
 `);
+
+// Seed default statuses if empty
+const existingLeadStatuses = db.prepare('SELECT COUNT(*) as count FROM lead_ticket_status').get() as { count: number };
+if (existingLeadStatuses.count === 0) {
+  const insertStatus = db.prepare('INSERT INTO lead_ticket_status (name, color, "order") VALUES (?, ?, ?)');
+  const defaultStatuses = [
+    ['Pendente', 'bg-amber-500/15 text-amber-400', 1],
+    ['Atendido', 'bg-ch-cyan/15 text-ch-cyan', 2],
+    ['Finalizado', 'bg-ch-muted/15 text-ch-muted', 3],
+  ];
+  for (const [name, color, order] of defaultStatuses) {
+    insertStatus.run(name, color, order as number);
+  }
+}
+
+// Convert old string statuses to the new capitalized names if running on v1 to v2 migration
+db.prepare("UPDATE lead_ticket SET status = 'Pendente' WHERE status = 'pending'").run();
+db.prepare("UPDATE lead_ticket SET status = 'Atendido' WHERE status = 'attended'").run();
+db.prepare("UPDATE lead_ticket SET status = 'Finalizado' WHERE status = 'closed'").run();
 
 // Custom Commands table
 db.exec(`

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import db from '../infrastructure/database';
 import aiService from '../infrastructure/AiService';
+import { connectToWhatsApp, disconnectWhatsApp } from '../bot/connection';
 
 const router = Router();
 
@@ -21,6 +22,28 @@ router.get('/config', (_req, res) => {
   } catch (err) {
     console.error('GET /config error:', err);
     res.status(500).json({ error: 'Failed to fetch config' });
+  }
+});
+
+// ===================== Bot Connection Control =====================
+
+router.post('/bot/connect', async (_req, res) => {
+  try {
+    await connectToWhatsApp();
+    res.json({ ok: true, message: 'Connection requested' });
+  } catch (err: any) {
+    console.error('POST /bot/connect error:', err);
+    res.status(500).json({ error: 'Failed to connect bot', details: err.message });
+  }
+});
+
+router.post('/bot/disconnect', async (_req, res) => {
+  try {
+    await disconnectWhatsApp();
+    res.json({ ok: true, message: 'Disconnection requested' });
+  } catch (err: any) {
+    console.error('POST /bot/disconnect error:', err);
+    res.status(500).json({ error: 'Failed to disconnect bot', details: err.message });
   }
 });
 
@@ -380,15 +403,160 @@ router.put('/lead-tickets/:id/status', (req, res) => {
   try {
     const id = Number(req.params.id);
     const { status } = req.body;
-    if (status === 'attended' || status === 'closed') {
+    // Check if new status is considered an "Atendido" or "Finalizado" behavior for sync logic
+    // We assume based on names, but let's be flexible and allow dynamic updates
+    if (status === 'Atendido' || status === 'Finalizado' || status === 'closed' || status === 'attended') {
       db.prepare(`UPDATE lead_ticket SET status = ?, attendedAt = datetime('now') WHERE id = ?`).run(status, id);
     } else {
       db.prepare('UPDATE lead_ticket SET status = ? WHERE id = ?').run(status, id);
     }
+
+    // --- CRM Sync Logic ---
+    // Update CRM contact status when ticket status changes
+    const ticket = db.prepare('SELECT contactId FROM lead_ticket WHERE id = ?').get(id) as any;
+    if (ticket && ticket.contactId) {
+      const contact = db.prepare('SELECT statusHistorico FROM contact WHERE id = ?').get(ticket.contactId) as any;
+      if (contact) {
+        let newCrmStatus = '';
+        if (status === 'Atendido' || status === 'attended') newCrmStatus = 'em_negociacao';
+        if (status === 'Finalizado' || status === 'closed') newCrmStatus = 'finalizado';
+
+        if (newCrmStatus) {
+          let historico = [];
+          try { historico = JSON.parse(contact.statusHistorico || '[]'); } catch { }
+          historico.push({
+            status: newCrmStatus,
+            data: new Date().toISOString(),
+            info: 'Atualizado via tela Leads & Tickets'
+          });
+
+          db.prepare('UPDATE contact SET statusAtual = ?, statusHistorico = ?, updatedAt = datetime("now") WHERE id = ?')
+            .run(newCrmStatus, JSON.stringify(historico), ticket.contactId);
+        }
+      }
+    }
+    // ----------------------
+
     res.json({ ok: true });
   } catch (err) {
     console.error('PUT /lead-tickets status error:', err);
     res.status(500).json({ error: 'Failed to update ticket status' });
+  }
+});
+
+// ===================== Lead Ticket Statuses =====================
+
+router.get('/lead-status', (_req, res) => {
+  try {
+    const statuses = db.prepare('SELECT * FROM lead_ticket_status ORDER BY "order" ASC').all();
+    res.json(statuses);
+  } catch (err) {
+    console.error('GET /lead-status error:', err);
+    res.status(500).json({ error: 'Failed to fetch lead valid statuses' });
+  }
+});
+
+router.post('/lead-status', (req, res) => {
+  try {
+    const { name, color } = req.body;
+    const maxOrder = db.prepare('SELECT MAX("order") as maxOrder FROM lead_ticket_status').get() as any;
+    const order = (maxOrder?.maxOrder || 0) + 1;
+
+    const info = db.prepare('INSERT INTO lead_ticket_status (name, color, "order") VALUES (?, ?, ?)')
+      .run(name, color || 'bg-ch-surface-2 text-ch-text', order);
+
+    res.json({ id: info.lastInsertRowid, name, color, order });
+  } catch (err) {
+    console.error('POST /lead-status error:', err);
+    res.status(500).json({ error: 'Failed to create lead status' });
+  }
+});
+
+router.put('/lead-status/reorder', (req, res) => {
+  try {
+    const { orderedIds } = req.body; // array of IDs in new order
+    if (!Array.isArray(orderedIds)) return res.status(400).json({ error: 'Invalid payload' });
+
+    const updateOrder = db.prepare('UPDATE lead_ticket_status SET "order" = ? WHERE id = ?');
+    db.transaction(() => {
+      orderedIds.forEach((id, index) => {
+        updateOrder.run(index + 1, id);
+      });
+    })();
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('PUT /lead-status/reorder error:', err);
+    res.status(500).json({ error: 'Failed to reorder statuses' });
+  }
+});
+
+router.put('/lead-status/:id', (req, res) => {
+  try {
+    const { name, color } = req.body;
+    const id = Number(req.params.id);
+
+    // update tickets that currently use this name if name changes
+    const oldStatus = db.prepare('SELECT name FROM lead_ticket_status WHERE id = ?').get(id) as any;
+    if (oldStatus && oldStatus.name !== name) {
+      db.prepare('UPDATE lead_ticket SET status = ? WHERE status = ?').run(name, oldStatus.name);
+    }
+
+    db.prepare('UPDATE lead_ticket_status SET name = ?, color = ? WHERE id = ?').run(name, color, id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('PUT /lead-status/:id error:', err);
+    res.status(500).json({ error: 'Failed to update status' });
+  }
+});
+
+router.delete('/lead-status/:id', (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const statusInfo = db.prepare('SELECT name FROM lead_ticket_status WHERE id = ?').get(id) as any;
+    if (statusInfo) {
+      // Fallback pending to first available or standard "Pendente"
+      db.prepare('UPDATE lead_ticket SET status = "Pendente" WHERE status = ?').run(statusInfo.name);
+    }
+    db.prepare('DELETE FROM lead_ticket_status WHERE id = ?').run(id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('DELETE /lead-status/:id error:', err);
+    res.status(500).json({ error: 'Failed to delete status' });
+  }
+});
+
+router.post('/lead-tickets/:id/summarize', async (req, res) => {
+  try {
+    const ticketId = Number(req.params.id);
+    const ticket = db.prepare('SELECT contactId, summary FROM lead_ticket WHERE id = ?').get(ticketId) as any;
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+
+    const messages = db.prepare('SELECT role, content FROM message_log WHERE contactId = ? ORDER BY timestamp ASC').all(ticket.contactId) as any[];
+    if (!messages || messages.length === 0) return res.status(400).json({ error: 'No messages to summarize' });
+
+    const conversationData = messages.map(m => `[${m.role === 'user' ? 'Cliente' : 'Assistente'}]: ${m.content}`).join('\n');
+    const promptContext = ticket.summary
+      ? `HISTÓRICO DE RESUMO ANTERIOR:\n${ticket.summary}\n\n---\nNOVAS MENSAGENS PARA ATUALIZAR O RESUMO HISTÓRICO:\n${conversationData}`
+      : `CONVERSA:\n${conversationData}`;
+
+    const summaryPrompt = `Atue como um analista de dados de CRM. Sua tarefa é criar/atualizar um resumo conciso e em tópicos da conversa entre o cliente e o assistente a seguir.
+Caso exista um "HISTÓRICO DE RESUMO ANTERIOR", não repita do zero, mas crie uma pequena linha do tempo ou apenas adicione quais foram os últimos desdobramentos.
+O resumo não deve ter mais do que 4 frases ou tópicos curtos. Foco total em intenção de compra, dúvidas principais e status da tratativa.
+Textos Fornecidos:
+${promptContext}`;
+
+    try {
+      const summary = await aiService.getAiResponse(summaryPrompt);
+      db.prepare('UPDATE lead_ticket SET summary = ? WHERE id = ?').run(summary, ticketId);
+      res.json({ summary });
+    } catch (aiErr: any) {
+      console.error('AI Summarize Error:', aiErr);
+      res.status(500).json({ error: 'AI Error: ' + aiErr.message });
+    }
+  } catch (err: any) {
+    console.error('POST /lead-tickets summarize error:', err);
+    res.status(500).json({ error: 'Failed to summarize ticket' });
   }
 });
 
@@ -469,6 +637,23 @@ router.put('/crm/:type/:id/status', (req, res) => {
     if (type === 'contact') {
       db.prepare('UPDATE contact SET statusAtual = ?, statusHistorico = ?, updatedAt = datetime("now") WHERE id = ?')
         .run(statusAtual, JSON.stringify(statusHistorico), Number(id));
+
+      // --- Lead Ticket Sync Logic ---
+      // Update pending tickets if CRM card is moved
+      let newTicketStatus = '';
+      if (statusAtual === 'em_negociacao') newTicketStatus = 'Atendido';
+      if (['finalizado', 'concluido', 'locado'].includes(statusAtual)) newTicketStatus = 'Finalizado';
+
+      if (newTicketStatus) {
+        if (newTicketStatus === 'Atendido' || newTicketStatus === 'Finalizado') {
+          db.prepare(`UPDATE lead_ticket SET status = ?, attendedAt = datetime('now') WHERE contactId = ? AND status != 'Finalizado' AND status != 'closed'`)
+            .run(newTicketStatus, Number(id));
+        } else {
+          db.prepare(`UPDATE lead_ticket SET status = ? WHERE contactId = ? AND status != 'Finalizado' AND status != 'closed'`)
+            .run(newTicketStatus, Number(id));
+        }
+      }
+      // ------------------------------
     } else if (type === 'form') {
       // Get current form data and update status
       const form = db.prepare('SELECT * FROM form WHERE id = ?').get(Number(id)) as any;

@@ -1,10 +1,10 @@
-import React, { useEffect, useState, useContext } from 'react';
+import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useSocket } from '../contexts/SocketContext';
 import { QRCodeCanvas } from 'qrcode.react';
 import {
-    Users, MessageSquare, TrendingUp, Activity, BarChart3, Clock, Brain,
-    Download, Tag, Zap, Calendar, Send, FileText, ArrowUpRight, ArrowDownRight, Minus
+    Users, MessageSquare, TrendingUp, Activity, BarChart3,
+    Download, Tag, FileText
 } from 'lucide-react';
 
 const API_URL = 'http://localhost:3020/api';
@@ -25,7 +25,7 @@ interface Metrics {
 }
 
 export const Dashboard: React.FC = () => {
-    const { status, qrCode } = useSocket();
+    const { botStatus, qrCode, botUser } = useSocket();
     const [metrics, setMetrics] = useState<Metrics | null>(null);
     const [loading, setLoading] = useState(true);
 
@@ -40,21 +40,21 @@ export const Dashboard: React.FC = () => {
             const { data } = await axios.get(`${API_URL}/metrics`);
             setMetrics(data);
         } catch (e) {
-            console.error('Erro ao carregar métricas:', e);
+            // Silently fail if metrics API is not available yet
         } finally {
             setLoading(false);
         }
     };
 
     const getStatusColor = () => {
-        if (status === 'open') return 'bg-emerald-500';
-        if (status === 'connecting') return 'bg-yellow-500 animate-pulse';
+        if (botStatus === 'connected' || botStatus === 'open') return 'bg-emerald-500';
+        if (botStatus === 'connecting') return 'bg-yellow-500 animate-pulse';
         return 'bg-red-500';
     };
 
     const getStatusText = () => {
-        if (status === 'open') return 'Conectado';
-        if (status === 'connecting') return 'Conectando...';
+        if (botStatus === 'connected' || botStatus === 'open') return 'Conectado';
+        if (botStatus === 'connecting') return 'Conectando...';
         return 'Desconectado';
     };
 
@@ -97,16 +97,55 @@ export const Dashboard: React.FC = () => {
                 </div>
             </div>
 
-            {/* QR Code se não conectado */}
-            {status !== 'open' && qrCode && (
-                <div className="glass rounded-2xl p-8 border border-ch-border mb-8 flex flex-col items-center gap-4">
-                    <h2 className="text-xl font-bold text-ch-text">Escaneie o QR Code</h2>
-                    <div className="bg-white p-4 rounded-2xl shadow-xl">
-                        <QRCodeCanvas value={qrCode} size={240} />
-                    </div>
-                    <p className="text-ch-muted text-sm">Abra o WhatsApp → Menu → Aparelhos Conectados → Conectar</p>
+            {/* Seção de Conexão */}
+            <div className="glass rounded-2xl p-6 md:p-8 border border-ch-border mb-8 flex flex-col md:flex-row items-center gap-6 justify-between">
+                <div className="flex flex-col gap-2">
+                    <h2 className="text-xl font-bold text-ch-text flex items-center gap-2">
+                        WhatsApp Connection
+                    </h2>
+                    <p className="text-sm text-ch-muted">
+                        Status atual: <span className="font-semibold">{getStatusText()}</span>
+                    </p>
+
+                    {(botStatus === 'connected' || botStatus === 'open') && botUser && (
+                        <div className="flex items-center gap-4 mt-4 bg-ch-surface p-4 rounded-xl border border-ch-border">
+                            {botUser.pic ? (
+                                <img src={botUser.pic} alt="Profile" className="w-12 h-12 rounded-full border border-ch-border" />
+                            ) : (
+                                <div className="w-12 h-12 rounded-full bg-ch-surface-2 flex items-center justify-center border border-ch-border">
+                                    <Users size={20} className="text-ch-muted" />
+                                </div>
+                            )}
+                            <div>
+                                <p className="font-bold text-ch-text">{botUser.name || 'Bot Conectado'}</p>
+                                <p className="text-xs text-ch-muted">{botUser.id?.split('@')[0] || ''}</p>
+                            </div>
+                            <div className="ml-auto px-3 py-1 bg-emerald-500/10 text-emerald-500 rounded-full text-xs font-bold border border-emerald-500/20">
+                                Online
+                            </div>
+                        </div>
+                    )}
                 </div>
-            )}
+
+                {/* QR Code se não conectado */}
+                {botStatus !== 'connected' && botStatus !== 'open' && qrCode && (
+                    <div className="flex flex-col items-center gap-3 bg-ch-surface p-4 rounded-2xl border border-ch-border shadow-lg">
+                        <div className="bg-white p-3 rounded-xl">
+                            <QRCodeCanvas value={qrCode} size={180} />
+                        </div>
+                        <p className="text-ch-muted text-xs text-center max-w-[200px]">
+                            Abra o WhatsApp → Menu → Aparelhos Conectados → Conectar
+                        </p>
+                    </div>
+                )}
+
+                {botStatus === 'connecting' && (
+                    <div className="flex flex-col items-center gap-3 p-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-ch-cyan" />
+                        <p className="text-ch-cyan text-sm animate-pulse">Estabelecendo conexão...</p>
+                    </div>
+                )}
+            </div>
 
             {/* Cards de métricas */}
             {metrics && (

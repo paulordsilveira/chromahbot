@@ -1,0 +1,492 @@
+diff --git a/server/src/api/routes.ts b/server/src/api/routes.ts
+index fd19a41..2914ed3 100644
+--- a/server/src/api/routes.ts
++++ b/server/src/api/routes.ts
+@@ -1,6 +1,7 @@
+ import { Router } from 'express';
+ import db from '../infrastructure/database';
+ import aiService from '../infrastructure/AiService';
++import { connectToWhatsApp, disconnectWhatsApp } from '../bot/connection';
+ 
+ const router = Router();
+ 
+@@ -24,6 +25,28 @@ router.get('/config', (_req, res) => {
+   }
+ });
+ 
++// ===================== Bot Connection Control =====================
++
++router.post('/bot/connect', async (_req, res) => {
++  try {
++    await connectToWhatsApp();
++    res.json({ ok: true, message: 'Connection requested' });
++  } catch (err: any) {
++    console.error('POST /bot/connect error:', err);
++    res.status(500).json({ error: 'Failed to connect bot', details: err.message });
++  }
++});
++
++router.post('/bot/disconnect', async (_req, res) => {
++  try {
++    await disconnectWhatsApp();
++    res.json({ ok: true, message: 'Disconnection requested' });
++  } catch (err: any) {
++    console.error('POST /bot/disconnect error:', err);
++    res.status(500).json({ error: 'Failed to disconnect bot', details: err.message });
++  }
++});
++
+ router.put('/config', (req, res) => {
+   try {
+     const data = req.body ?? {};
+@@ -380,11 +403,41 @@ router.put('/lead-tickets/:id/status', (req, res) => {
+   try {
+     const id = Number(req.params.id);
+     const { status } = req.body;
+-    if (status === 'attended' || status === 'closed') {
++
++    // Check if new status is considered an "Atendido" or "Finalizado" behavior for sync logic
++    // We assume based on names, but let's be flexible and allow dynamic updates
++    if (status === 'Atendido' || status === 'Finalizado' || status === 'closed' || status === 'attended') {
+       db.prepare(`UPDATE lead_ticket SET status = ?, attendedAt = datetime('now') WHERE id = ?`).run(status, id);
+     } else {
+       db.prepare('UPDATE lead_ticket SET status = ? WHERE id = ?').run(status, id);
+     }
++
++    // --- CRM Sync Logic ---
++    // Update CRM contact status when ticket status changes
++    const ticket = db.prepare('SELECT contactId FROM lead_ticket WHERE id = ?').get(id) as any;
++    if (ticket && ticket.contactId) {
++      const contact = db.prepare('SELECT statusHistorico FROM contact WHERE id = ?').get(ticket.contactId) as any;
++      if (contact) {
++        let newCrmStatus = '';
++        if (status === 'Atendido' || status === 'attended') newCrmStatus = 'em_negociacao';
++        if (status === 'Finalizado' || status === 'closed') newCrmStatus = 'finalizado';
++
++        if (newCrmStatus) {
++          let historico = [];
++          try { historico = JSON.parse(contact.statusHistorico || '[]'); } catch { }
++          historico.push({
++            status: newCrmStatus,
++            data: new Date().toISOString(),
++            info: 'Atualizado via tela Leads & Tickets'
++          });
++
++          db.prepare('UPDATE contact SET statusAtual = ?, statusHistorico = ?, updatedAt = datetime("now") WHERE id = ?')
++            .run(newCrmStatus, JSON.stringify(historico), ticket.contactId);
++        }
++      }
++    }
++    // ----------------------
++
+     res.json({ ok: true });
+   } catch (err) {
+     console.error('PUT /lead-tickets status error:', err);
+@@ -392,22 +445,143 @@ router.put('/lead-tickets/:id/status', (req, res) => {
+   }
+ });
+ 
++
++// ===================== Lead Ticket Statuses =====================
++
++router.get('/lead-status', (_req, res) => {
++  try {
++    const statuses = db.prepare('SELECT * FROM lead_ticket_status ORDER BY "order" ASC').all();
++    res.json(statuses);
++  } catch (err) {
++    console.error('GET /lead-status error:', err);
++    res.status(500).json({ error: 'Failed to fetch lead valid statuses' });
++  }
++});
++
++router.post('/lead-status', (req, res) => {
++  try {
++    const { name, color } = req.body;
++    const maxOrder = db.prepare('SELECT MAX("order") as maxOrder FROM lead_ticket_status').get() as any;
++    const order = (maxOrder?.maxOrder || 0) + 1;
++
++    const info = db.prepare('INSERT INTO lead_ticket_status (name, color, "order") VALUES (?, ?, ?)')
++      .run(name, color || 'bg-ch-surface-2 text-ch-text', order);
++
++    res.json({ id: info.lastInsertRowid, name, color, order });
++  } catch (err) {
++    console.error('POST /lead-status error:', err);
++    res.status(500).json({ error: 'Failed to create lead status' });
++  }
++});
++
++router.put('/lead-status/reorder', (req, res) => {
++  try {
++    const { orderedIds } = req.body; // array of IDs in new order
++    if (!Array.isArray(orderedIds)) return res.status(400).json({ error: 'Invalid payload' });
++
++    const updateOrder = db.prepare('UPDATE lead_ticket_status SET "order" = ? WHERE id = ?');
++    db.transaction(() => {
++      orderedIds.forEach((id, index) => {
++        updateOrder.run(index + 1, id);
++      });
++    })();
++
++    res.json({ ok: true });
++  } catch (err) {
++    console.error('PUT /lead-status/reorder error:', err);
++    res.status(500).json({ error: 'Failed to reorder statuses' });
++  }
++});
++
++router.put('/lead-status/:id', (req, res) => {
++  try {
++    const { name, color } = req.body;
++    const id = Number(req.params.id);
++
++    // update tickets that currently use this name if name changes
++    const oldStatus = db.prepare('SELECT name FROM lead_ticket_status WHERE id = ?').get(id) as any;
++    if (oldStatus && oldStatus.name !== name) {
++      db.prepare('UPDATE lead_ticket SET status = ? WHERE status = ?').run(name, oldStatus.name);
++    }
++
++    db.prepare('UPDATE lead_ticket_status SET name = ?, color = ? WHERE id = ?').run(name, color, id);
++    res.json({ ok: true });
++  } catch (err) {
++    console.error('PUT /lead-status/:id error:', err);
++    res.status(500).json({ error: 'Failed to update status' });
++  }
++});
++
++router.delete('/lead-status/:id', (req, res) => {
++  try {
++    const id = Number(req.params.id);
++    const statusInfo = db.prepare('SELECT name FROM lead_ticket_status WHERE id = ?').get(id) as any;
++    if (statusInfo) {
++      // Fallback pending to first available or standard "Pendente"
++      db.prepare('UPDATE lead_ticket SET status = "Pendente" WHERE status = ?').run(statusInfo.name);
++    }
++    db.prepare('DELETE FROM lead_ticket_status WHERE id = ?').run(id);
++    res.json({ ok: true });
++  } catch (err) {
++    console.error('DELETE /lead-status/:id error:', err);
++    res.status(500).json({ error: 'Failed to delete status' });
++  }
++});
++
++router.post('/lead-tickets/:id/summarize', async (req, res) => {
++  try {
++    const ticketId = Number(req.params.id);
++    const ticket = db.prepare('SELECT contactId, summary FROM lead_ticket WHERE id = ?').get(ticketId) as any;
++    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
++
++    const messages = db.prepare('SELECT role, content FROM message_log WHERE contactId = ? ORDER BY timestamp ASC').all(ticket.contactId) as any[];
++    if (!messages || messages.length === 0) return res.status(400).json({ error: 'No messages to summarize' });
++
++    const conversationData = messages.map(m => \`[\${m.role === 'user' ? 'Cliente' : 'Assistente'}]: \${m.content}\`).join('\\n');
++    const promptContext = ticket.summary 
++      ? \`HISTÓRICO DE RESUMO ANTERIOR:\\n\${ticket.summary}\\n\\n---\\nNOVAS MENSAGENS PARA ATUALIZAR O RESUMO HISTÓRICO:\\n\${conversationData}\` 
++      : \`CONVERSA:\\n\${conversationData}\`;
++      
++    const config = db.prepare('SELECT * FROM config WHERE id = 1').get() as any;
++    const { AiService } = require('../../bot/services/ai');
++    
++    const summaryPrompt = \`Atue como um analista de dados de CRM. Sua tarefa é criar/atualizar um resumo conciso e em tópicos da conversa entre o cliente e o assistente a seguir.
++Caso exista um "HISTÓRICO DE RESUMO ANTERIOR", não repita do zero, mas crie uma pequena linha do tempo ou apenas adicione quais foram os últimos desdobramentos.
++O resumo não deve ter mais do que 4 frases ou tópicos curtos. Foco total em intenção de compra, dúvidas principais e status da tratativa.
++Textos Fornecidos:
++\${promptContext}\`;
++
++    try {
++      const summary = await AiService.generateCompletion(summaryPrompt, config);
++      db.prepare('UPDATE lead_ticket SET summary = ? WHERE id = ?').run(summary, ticketId);
++      res.json({ summary });
++    } catch (aiErr: any) {
++      console.error('AI Summarize Error:', aiErr);
++      res.status(500).json({ error: 'AI Error: ' + aiErr.message });
++    }
++  } catch (err: any) {
++    console.error('POST /lead-tickets summarize error:', err);
++    res.status(500).json({ error: 'Failed to summarize ticket' });
++  }
++});
++
+ // ===================== CRM =====================
+ 
++
+ router.get('/crm', (_req, res) => {
+   try {
+     // Get contacts (leads from bot)
+     const contacts = db.prepare(`
+-      SELECT c.*, 
+-        (SELECT COUNT(*) FROM message_log WHERE contactId = c.id) as messageCount,
+-        (SELECT content FROM message_log WHERE contactId = c.id ORDER BY timestamp DESC LIMIT 1) as lastMessage
++      SELECT c.*,
++      (SELECT COUNT(*) FROM message_log WHERE contactId = c.id) as messageCount,
++    (SELECT content FROM message_log WHERE contactId = c.id ORDER BY timestamp DESC LIMIT 1) as lastMessage
+       FROM contact c 
+       ORDER BY c.updatedAt DESC
+-    `).all() as any[];
++  `).all() as any[];
+ 
+     // Get forms (atendimento_interno)
+     const forms = db.prepare(`
+-      SELECT * FROM form WHERE type = 'atendimento_interno' ORDER BY createdAt DESC
++SELECT * FROM form WHERE type = 'atendimento_interno' ORDER BY createdAt DESC
+     `).all() as any[];
+ 
+     // Parse form data and unify format
+@@ -415,7 +589,7 @@ router.get('/crm', (_req, res) => {
+       let parsed = {};
+       try { parsed = JSON.parse(f.data || '{}'); } catch { }
+       return {
+-        id: `form_${f.id}`,
++        id: `form_${ f.id } `,
+         formId: f.id,
+         origem: 'formulario',
+         nome: (parsed as any).nome || '',
+@@ -434,7 +608,7 @@ router.get('/crm', (_req, res) => {
+ 
+     // Format contacts
+     const contactClients = contacts.map((c: any) => ({
+-      id: `contact_${c.id}`,
++      id: `contact_${ c.id } `,
+       contactId: c.id,
+       origem: 'bot',
+       nome: c.name || c.phone || '',
+@@ -469,6 +643,24 @@ router.put('/crm/:type/:id/status', (req, res) => {
+     if (type === 'contact') {
+       db.prepare('UPDATE contact SET statusAtual = ?, statusHistorico = ?, updatedAt = datetime("now") WHERE id = ?')
+         .run(statusAtual, JSON.stringify(statusHistorico), Number(id));
++
++      // --- Lead Ticket Sync Logic ---
++      // Update pending tickets if CRM card is moved
++      let newTicketStatus = '';
++      if (statusAtual === 'em_negociacao') newTicketStatus = 'Atendido';
++      if (['finalizado', 'concluido', 'locado'].includes(statusAtual)) newTicketStatus = 'Finalizado';
++
++      if (newTicketStatus) {
++        if (newTicketStatus === 'Atendido' || newTicketStatus === 'Finalizado') {
++          db.prepare(`UPDATE lead_ticket SET status = ?, attendedAt = datetime('now') WHERE contactId = ? AND status != 'Finalizado' AND status != 'closed'`)
++            .run(newTicketStatus, Number(id));
++        } else {
++          db.prepare(`UPDATE lead_ticket SET status = ? WHERE contactId = ? AND status != 'Finalizado' AND status != 'closed'`)
++            .run(newTicketStatus, Number(id));
++        }
++      }
++      // ------------------------------
++
+     } else if (type === 'form') {
+       // Get current form data and update status
+       const form = db.prepare('SELECT * FROM form WHERE id = ?').get(Number(id)) as any;
+@@ -516,9 +708,9 @@ router.get('/crm/contact/:id/messages', (req, res) => {
+   try {
+     const contactId = Number(req.params.id);
+     const messages = db.prepare(`
+-      SELECT * FROM message_log 
+-      WHERE contactId = ? 
+-      ORDER BY timestamp ASC
++SELECT * FROM message_log 
++      WHERE contactId = ?
++  ORDER BY timestamp ASC
+     `).all(contactId);
+ 
+     res.json(messages);
+@@ -544,67 +736,67 @@ router.post('/improve-text', async (req, res) => {
+     const prompts: Record<string, string> = {
+       systemPrompt: `Você é um especialista em criar System Prompts para assistentes virtuais de WhatsApp empresariais.
+ 
+-TAREFA: Reescreva e melhore o System Prompt abaixo para que o assistente virtual funcione de forma otimizada.
++  TAREFA: Reescreva e melhore o System Prompt abaixo para que o assistente virtual funcione de forma otimizada.
+ 
+ REGRAS DO SYSTEM PROMPT IDEAL:
+-- Defina claramente o papel do assistente (quem ele é, qual empresa representa)
+-- Estabeleça limites claros (o que pode e não pode fazer)
+-- Defina o tom de comunicação (profissional, amigável, direto)
+-- Inclua regras sobre quando encaminhar para atendimento humano
+-- Mencione que deve usar as informações da documentação e FAQ para responder
+-- Inclua regra para NUNCA inventar informações
+-- Mantenha texto puro sem markdown
+-- Retorne APENAS o System Prompt melhorado, sem explicações
++- Defina claramente o papel do assistente(quem ele é, qual empresa representa)
++  - Estabeleça limites claros(o que pode e não pode fazer)
++    - Defina o tom de comunicação(profissional, amigável, direto)
++      - Inclua regras sobre quando encaminhar para atendimento humano
++        - Mencione que deve usar as informações da documentação e FAQ para responder
++          - Inclua regra para NUNCA inventar informações
++            - Mantenha texto puro sem markdown
++              - Retorne APENAS o System Prompt melhorado, sem explicações
+ 
+ CONTEXTO: O assistente é da empresa "${empresaNome}".`,
+ 
+       assistantContext: `Você é um especialista em design de personalidade e UX conversacional para chatbots de WhatsApp.
+ 
+-TAREFA: Refine o contexto de personalidade abaixo para criar uma identidade conversacional marcante e consistente.
++  TAREFA: Refine o contexto de personalidade abaixo para criar uma identidade conversacional marcante e consistente.
+ 
+ O BOM CONTEXTO DE PERSONALIDADE DEVE TER:
+-- Tom de voz definido (formal/informal/misto)
+-- Estilo de comunicação (direto, detalhista, empático)
+-- Uso de emojis (quando sim, quando não, exemplos)
+-- Comprimento ideal das respostas  
+-- Como lidar com reclamações e frustrações
+-- Como saudar e se despedir
+-- Palavras e expressões que deve/não deve usar
+-- Mantenha texto puro sem markdown
+-- Retorne APENAS o contexto melhorado, sem explicações
++- Tom de voz definido(formal / informal / misto)
++  - Estilo de comunicação(direto, detalhista, empático)
++    - Uso de emojis(quando sim, quando não, exemplos)
++      - Comprimento ideal das respostas
++        - Como lidar com reclamações e frustrações
++          - Como saudar e se despedir
++            - Palavras e expressões que deve / não deve usar
++              - Mantenha texto puro sem markdown
++                - Retorne APENAS o contexto melhorado, sem explicações
+ 
+ CONTEXTO: O assistente é da empresa "${empresaNome}".`,
+ 
+-      documentacao: `Você é um especialista em organização de conhecimento para bases de IA (RAG/Knowledge Base).
++      documentacao: `Você é um especialista em organização de conhecimento para bases de IA(RAG / Knowledge Base).
+ 
+-TAREFA: Reorganize e melhore a documentação abaixo para que um assistente de IA consiga extrair informações rapidamente e responder perguntas dos clientes com precisão.
++  TAREFA: Reorganize e melhore a documentação abaixo para que um assistente de IA consiga extrair informações rapidamente e responder perguntas dos clientes com precisão.
+ 
+ A DOCUMENTAÇÃO OTIMIZADA PARA IA DEVE:
+-- Organizar em seções temáticas claras (Sobre a Empresa, Serviços, Diferenciais, Processos, Horários, Contato)
+-- Cada seção com tópicos objetivos
+-- Incluir dados específicos (preços, prazos, condições) quando presentes
+-- Eliminar redundâncias
+-- Usar marcadores (• ou -) para listas
+-- Usar * para negritar termos importantes
+-- Manter linguagem clara e direta
+-- Retorne APENAS a documentação melhorada, sem explicações`,
++- Organizar em seções temáticas claras(Sobre a Empresa, Serviços, Diferenciais, Processos, Horários, Contato)
++  - Cada seção com tópicos objetivos
++    - Incluir dados específicos(preços, prazos, condições) quando presentes
++      - Eliminar redundâncias
++        - Usar marcadores(• ou -) para listas
++          - Usar * para negritar termos importantes
++            - Manter linguagem clara e direta
++              - Retorne APENAS a documentação melhorada, sem explicações`,
+ 
+-      faqText: `Você é um especialista em FAQ (Perguntas Frequentes) otimizado para WhatsApp.
++      faqText: `Você é um especialista em FAQ(Perguntas Frequentes) otimizado para WhatsApp.
+ 
+-TAREFA: Reescreva e organize o FAQ abaixo para máxima clareza quando enviado via WhatsApp.
++  TAREFA: Reescreva e organize o FAQ abaixo para máxima clareza quando enviado via WhatsApp.
+ 
+ O FAQ IDEAL PARA WHATSAPP DEVE:
+-- Cada pergunta começar com 📌 em negrito (*pergunta*)
+-- Resposta logo abaixo, clara e concisa (2-3 linhas máx)
+-- Usar emojis relevantes (✅ ❓ 📍 ⏰ 💰 📞 🔗)
+-- Separar perguntas com linha em branco
+-- Agrupar por tema se houver muitas perguntas
+-- Incluir ao final: "Não encontrou sua dúvida? Digite *CONTATO* para falar com um atendente."
+-- Retorne APENAS o FAQ melhorado, sem explicações`
++- Cada pergunta começar com 📌 em negrito(* pergunta *)
++  - Resposta logo abaixo, clara e concisa(2 - 3 linhas máx)
++    - Usar emojis relevantes(✅ ❓ 📍 ⏰ 💰 📞 🔗)
++      - Separar perguntas com linha em branco
++        - Agrupar por tema se houver muitas perguntas
++          - Incluir ao final: "Não encontrou sua dúvida? Digite *CONTATO* para falar com um atendente."
++            - Retorne APENAS o FAQ melhorado, sem explicações`
+     };
+ 
+     const systemInstruction = prompts[fieldType] || prompts.documentacao;
+-    const improved = await aiService.getAiResponse(`${systemInstruction}\n\nTexto original:\n${text}`);
++    const improved = await aiService.getAiResponse(`${ systemInstruction } \n\nTexto original: \n${ text } `);
+ 
+     res.json({ improved });
+   } catch (err: any) {
+@@ -691,7 +883,7 @@ router.get('/metrics', (_req, res) => {
+     const dailyMessages = db.prepare(`
+       SELECT DATE(timestamp) as day, COUNT(*) as count, role 
+       FROM message_log WHERE timestamp >= ? GROUP BY day, role ORDER BY day ASC
+-    `).all(weekStart) as any[];
++  `).all(weekStart) as any[];
+ 
+     // Popular categories (top 5 by items viewed)
+     const topCategories = db.prepare(`
+@@ -699,17 +891,17 @@ router.get('/metrics', (_req, res) => {
+       FROM category c
+       LEFT JOIN message_log ml ON ml.content LIKE '%' || c.name || '%' AND ml.role = 'assistant'
+       GROUP BY c.id ORDER BY mentions DESC LIMIT 5
+-    `).all() as any[];
++  `).all() as any[];
+ 
+     // Forms by type
+     const formsByType = db.prepare(`
+       SELECT type, COUNT(*) as count FROM form GROUP BY type ORDER BY count DESC
+-    `).all();
++  `).all();
+ 
+     // Active contacts today
+     const activeToday = (db.prepare(`
+       SELECT COUNT(DISTINCT contactId) as c FROM message_log WHERE timestamp >= ?
+-    `).get(todayStart) as any).c;
++  `).get(todayStart) as any).c;
+ 
+     // AI vs URA usage
+     const config = db.prepare('SELECT isAiEnabled FROM config WHERE id = 1').get() as any;
+@@ -766,7 +958,7 @@ router.get('/contacts/:contactId/tags', (req, res) => {
+   try {
+     const tags = db.prepare(`
+       SELECT t.* FROM tag t JOIN contact_tag ct ON ct.tagId = t.id WHERE ct.contactId = ?
+-    `).all(Number(req.params.contactId));
++  `).all(Number(req.params.contactId));
+     res.json(tags);
+   } catch (err: any) { res.status(500).json({ error: err.message }); }
+ });
+@@ -827,7 +1019,7 @@ router.get('/scheduled-messages', (_req, res) => {
+       FROM scheduled_message sm 
+       LEFT JOIN contact c ON sm.contactId = c.id 
+       ORDER BY sm.scheduledAt ASC
+-    `).all();
++  `).all();
+     res.json(messages);
+   } catch (err: any) { res.status(500).json({ error: err.message }); }
+ });
+@@ -837,8 +1029,8 @@ router.post('/scheduled-messages', (req, res) => {
+     const { contactId, targetJid, message, scheduledAt, isBroadcast, broadcastTagId } = req.body;
+     if (!message || !scheduledAt) return res.status(400).json({ error: 'message e scheduledAt são obrigatórios' });
+     const result = db.prepare(`
+-      INSERT INTO scheduled_message (contactId, targetJid, message, scheduledAt, isBroadcast, broadcastTagId) VALUES (?, ?, ?, ?, ?, ?)
+-    `).run(contactId || null, targetJid || null, message, scheduledAt, isBroadcast ? 1 : 0, broadcastTagId || null);
++      INSERT INTO scheduled_message(contactId, targetJid, message, scheduledAt, isBroadcast, broadcastTagId) VALUES(?, ?, ?, ?, ?, ?)
++  `).run(contactId || null, targetJid || null, message, scheduledAt, isBroadcast ? 1 : 0, broadcastTagId || null);
+     res.json({ id: result.lastInsertRowid });
+   } catch (err: any) { res.status(500).json({ error: err.message }); }
+ });
+@@ -883,7 +1075,7 @@ router.get('/export/:type', (req, res) => {
+         data = db.prepare(`
+           SELECT ml.id, c.name as contactName, c.phone, ml.content, ml.role, ml.timestamp
+           FROM message_log ml JOIN contact c ON ml.contactId = c.id ORDER BY ml.timestamp DESC LIMIT 1000
+-        `).all() as any[];
++  `).all() as any[];
+         filename = 'mensagens';
+         break;
+       case 'forms':
+@@ -903,18 +1095,18 @@ router.get('/export/:type', (req, res) => {
+     if (format === 'csv') {
+       if (data.length === 0) return res.status(200).send('');
+       const headers = Object.keys(data[0]).join(',');
+-      const rows = data.map(row => Object.values(row).map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','));
+-      const csv = [headers, ...rows].join('\n');
+-      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+-      res.setHeader('Content-Disposition', `attachment; filename=${filename}_${new Date().toISOString().split('T')[0]}.csv`);
+-      return res.send('\uFEFF' + csv); // BOM for Excel UTF-8
++      const rows = data.map(row => Object.values(row).map(v => `"${String(v ?? '').replace(/" / g, '""')}"`).join(','));
++const csv = [headers, ...rows].join('\n');
++res.setHeader('Content-Type', 'text/csv; charset=utf-8');
++res.setHeader('Content-Disposition', `attachment; filename=${filename}_${new Date().toISOString().split('T')[0]}.csv`);
++return res.send('\uFEFF' + csv); // BOM for Excel UTF-8
+     }
+ 
+-    res.json(data);
++res.json(data);
+   } catch (err: any) {
+-    console.error('GET /export error:', err);
+-    res.status(500).json({ error: err.message });
+-  }
++  console.error('GET /export error:', err);
++  res.status(500).json({ error: err.message });
++}
+ });
+ 
+ export default router;
