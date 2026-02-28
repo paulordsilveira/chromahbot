@@ -123,6 +123,21 @@ export const handleMessage = async (msg: WAMessage, sock: any) => {
         }
     }
 
+    // ─── 3.5. Comando global (Assistente) ───
+    try {
+        const config = db.prepare('SELECT assistantName FROM config WHERE id = 1').get() as any;
+        if (config?.assistantName && lower === config.assistantName.toLowerCase()) {
+            userCategoryContext.delete(jid);
+            userSubcategoryContext.delete(jid);
+            userFormStates.delete(jid);
+            const { routeToAI } = await import('./modules/aiRouter');
+            await routeToAI(sock, jid, name, contactId, normalized);
+            return;
+        }
+    } catch (e) {
+        console.error("[Flow] Erro ao verificar assistantName global:", e);
+    }
+
     // ─── 4. Formulário em andamento ───
     if (userFormStates.has(jid)) {
         const state = userFormStates.get(jid)!;

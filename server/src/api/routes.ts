@@ -94,7 +94,8 @@ router.put('/config', (req, res) => {
         businessHoursStart = COALESCE(?, businessHoursStart),
         businessHoursEnd = COALESCE(?, businessHoursEnd),
         businessDays = COALESCE(?, businessDays),
-        outsideHoursMessage = COALESCE(?, outsideHoursMessage)
+        outsideHoursMessage = COALESCE(?, outsideHoursMessage),
+        assistantName = COALESCE(?, assistantName)
       WHERE id = 1
     `).run(
       data.welcomeMessage || null, data.welcomeImageUrl || null, data.logoImage || null,
@@ -113,7 +114,8 @@ router.put('/config', (req, res) => {
       data.businessHoursStart || null,
       data.businessHoursEnd || null,
       data.businessDays || null,
-      data.outsideHoursMessage || null
+      data.outsideHoursMessage || null,
+      data.assistantName || null
     );
 
     const config = db.prepare('SELECT * FROM config WHERE id = 1').get() as any;

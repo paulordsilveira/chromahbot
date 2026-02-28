@@ -127,6 +127,7 @@ addColumnIfNotExists('config', 'docsMessage', 'TEXT');
 addColumnIfNotExists('config', 'docsFiles', 'TEXT');
 addColumnIfNotExists("config", "isAiEnabled", "INTEGER DEFAULT 1");
 addColumnIfNotExists('config', 'botNumber', 'TEXT');
+addColumnIfNotExists('config', 'assistantName', "TEXT DEFAULT 'Mobius'");
 addColumnIfNotExists('contact', 'botPaused', 'INTEGER DEFAULT 0');
 
 // Lead tickets table

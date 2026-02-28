@@ -41,7 +41,11 @@ function buildMainMenu() {
     menuText += `──────────────────\n`;
     menuText += `ℹ️ Digite o *número* da opção desejada.`;
 
-    const config = db.prepare('SELECT logoImage FROM config WHERE id = 1').get() as any;
+    const config = db.prepare('SELECT logoImage, assistantName FROM config WHERE id = 1').get() as any;
+    if (config?.assistantName) {
+        menuText += `\nOu digite "${config.assistantName}" para voltar a falar com assistente.`;
+    }
+
     const images: string[] = [];
     if (config?.logoImage && config.logoImage.startsWith('data:image')) {
         images.push(config.logoImage);
@@ -114,6 +118,13 @@ export async function handleAiTest(req: any, res: any) {
                 responses: [{ type: 'text', content: text, images: images.length > 0 ? images : undefined }],
                 sessionContext: ctx
             });
+        }
+
+        // ── COMANDO GLOBAL (Assistente) ──
+        const configConfig = db.prepare('SELECT assistantName FROM config WHERE id = 1').get() as any;
+        if (configConfig?.assistantName && lower === configConfig.assistantName.toLowerCase()) {
+            ctx = { categoryId: null, subcategoryId: null, subcategoryIndex: null };
+            // Como 'lower' não vai dar match em Voltar/Menu/Saudação, o fluxo cairá direto na IA lá embaixo.
         }
 
         // ── VOLTAR ──

@@ -45,11 +45,13 @@ export const sendWelcome = async (sock: any, jid: string, name: string, contactI
 export const sendMainMenu = async (sock: any, jid: string, name: string, contactId: number | null) => {
     let categories: any[] = [];
     let logoImage: string | null = null;
+    let assistantName: string | null = null;
 
     try {
         categories = db.prepare('SELECT * FROM category ORDER BY "order" ASC').all() as any[];
-        const config = db.prepare('SELECT logoImage FROM config WHERE id = 1').get() as any;
+        const config = db.prepare('SELECT logoImage, assistantName FROM config WHERE id = 1').get() as any;
         if (config?.logoImage) logoImage = config.logoImage;
+        if (config?.assistantName) assistantName = config.assistantName;
     } catch (e) {
         console.error("DB Error:", e);
     }
@@ -64,6 +66,9 @@ export const sendMainMenu = async (sock: any, jid: string, name: string, contact
 
     menuText += `──────────────────\n`;
     menuText += `ℹ️ Digite o *número* da opção desejada.`;
+    if (assistantName) {
+        menuText += `\nOu digite "${assistantName}" para voltar a falar com assistente.`;
+    }
 
     if (logoImage && logoImage.startsWith('data:image')) {
         try {

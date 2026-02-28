@@ -5,6 +5,7 @@ import { X, Bot, BrainCircuit, Cpu, Save, CheckCircle, Globe, MessageSquare, Pho
 const API_URL = 'http://localhost:3020/api';
 
 type Config = {
+  assistantName?: string;
   welcomeMessage?: string;
   welcomeImageUrl?: string;
   logoImage?: string;
@@ -345,8 +346,21 @@ export const Settings: React.FC = () => {
 
                 <div>
                   <h3 className="text-lg font-semibold text-ch-text flex items-center gap-2 mb-4">
-                    <MessageSquare size={20} className="text-ch-cyan" /> Boas-vindas
+                    <MessageSquare size={20} className="text-ch-cyan" /> Boas-vindas e Identidade
                   </h3>
+
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-ch-muted mb-2">Nome do Assistente IA</label>
+                    <input
+                      value={config.assistantName ?? ''}
+                      onChange={(e) => updateConfig('assistantName', e.target.value)}
+                      className="w-full bg-ch-surface-2 border border-ch-border rounded-xl p-3 text-ch-text focus:ring-2 focus:ring-ch-cyan/50 focus:border-ch-cyan outline-none transition-all"
+                      type="text"
+                      placeholder="Ex: Mobius"
+                    />
+                    <p className="text-xs text-ch-muted mt-2">Nome usado como comando de resgate ("voltar à IA") e na identificação do bot.</p>
+                  </div>
+
                   <label className="block text-sm font-medium text-ch-muted mb-2">Mensagem do Assistente</label>
                   <textarea
                     value={config.welcomeMessage ?? ''}
