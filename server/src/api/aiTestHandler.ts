@@ -124,7 +124,7 @@ export async function handleAiTest(req: any, res: any) {
         const configConfig = db.prepare('SELECT assistantName FROM config WHERE id = 1').get() as any;
         if (configConfig?.assistantName && lower === configConfig.assistantName.toLowerCase()) {
             ctx = { categoryId: null, subcategoryId: null, subcategoryIndex: null };
-            message = `Oi ${configConfig.assistantName}, estou aqui!`;
+            message = `(Sistema: O usuário digitou seu nome para sair do menu. Diga um oi amigável, avise que está de volta e pergunte o que ele precisa. É ESTREITAMENTE PROIBIDO USAR A FERRAMENTA DE MENU NESTA RESPOSTA.)`;
         }
 
         // ── VOLTAR ──

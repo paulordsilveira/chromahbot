@@ -131,7 +131,7 @@ export const handleMessage = async (msg: WAMessage, sock: any) => {
             userSubcategoryContext.delete(jid);
             userFormStates.delete(jid);
             const { routeToAI } = await import('./modules/aiRouter');
-            const rescuePrompt = `Oi ${config.assistantName}, estou aqui!`;
+            const rescuePrompt = `(Sistema: O usuário digitou seu nome para sair do menu. Diga um oi amigável, avise que está de volta e pergunte o que ele precisa. É ESTREITAMENTE PROIBIDO USAR A FERRAMENTA DE MENU NESTA RESPOSTA.)`;
             await routeToAI(sock, jid, name, contactId, rescuePrompt);
             return;
         }
