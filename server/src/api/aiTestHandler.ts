@@ -96,7 +96,7 @@ function buildItems(subcategoryId: number) {
  */
 export async function handleAiTest(req: any, res: any) {
     try {
-        const { message, history, sessionContext } = req.body;
+        let { message, history, sessionContext } = req.body;
         if (!message) return res.status(400).json({ error: 'message é obrigatório' });
 
         const lower = message.toLowerCase().trim();
@@ -124,7 +124,7 @@ export async function handleAiTest(req: any, res: any) {
         const configConfig = db.prepare('SELECT assistantName FROM config WHERE id = 1').get() as any;
         if (configConfig?.assistantName && lower === configConfig.assistantName.toLowerCase()) {
             ctx = { categoryId: null, subcategoryId: null, subcategoryIndex: null };
-            // Como 'lower' não vai dar match em Voltar/Menu/Saudação, o fluxo cairá direto na IA lá embaixo.
+            message = `Oi ${configConfig.assistantName}, estou aqui!`;
         }
 
         // ── VOLTAR ──

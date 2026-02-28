@@ -131,7 +131,8 @@ export const handleMessage = async (msg: WAMessage, sock: any) => {
             userSubcategoryContext.delete(jid);
             userFormStates.delete(jid);
             const { routeToAI } = await import('./modules/aiRouter');
-            await routeToAI(sock, jid, name, contactId, normalized);
+            const rescuePrompt = `Oi ${config.assistantName}, estou aqui!`;
+            await routeToAI(sock, jid, name, contactId, rescuePrompt);
             return;
         }
     } catch (e) {
