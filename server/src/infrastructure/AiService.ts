@@ -179,7 +179,7 @@ class AiService {
         prompt += `REGRA DE OURO: Você é um ATENDENTE HUMANO no WhatsApp. Converse de forma natural E direcione para o catálogo quando fizer sentido.
 
 COMO USAR AS TOOLS:
-- 'enviar_menu_principal': Quando o cliente pedir "menu", "opções", "catálogo", "o que vocês fazem", "quais categorias", "ver tudo". NUNCA use se o cliente apenas chamar pelo seu nome (ex: "${config.assistantName || 'Mobius'}") para voltar a falar com você.
+- 'enviar_menu_principal': Use SOMENTE quando o cliente pedir EXPLICITAMENTE o menu ou o catálogo completo. NÃO USE se o cliente fizer perguntas abertas gerais (ex: "o que vocês fazem?", "o que é a empresa?"). Nessas situações, apenas responda em texto resumindo a empresa. NUNCA use se o cliente apenas chamar pelo seu nome (ex: "${config.assistantName || 'Mobius'}") ou falar "Oi".
 - 'mostrar_categoria': Quando o cliente PEDIR para ver/navegar uma categoria: "me mostra recrutamento", "quero ver consultoria", "abre automações".
 - 'mostrar_subcategoria': Quando o cliente PEDIR para ver/navegar uma subcategoria: "me mostra currículo", "quero ver simulação".
 

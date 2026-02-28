@@ -55,7 +55,7 @@ export const FORM_PROMPTS: Record<string, Record<string, string>> = {
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
     {
         name: 'enviar_menu_principal',
-        description: 'Envia o menu principal mostrando TODAS as categorias disponíveis. Use quando: o cliente pedir "menu", "catálogo", "opções", "o que vocês fazem", "quais categorias", "outras categorias", "ver tudo", ou qualquer variação pedindo para ver a lista completa de serviços/categorias. NUNCA use em saudações simples como "oi" ou "olá", nem quando o cliente chamar você apenas pelo seu nome.',
+        description: 'Envia o menu principal mostrando TODAS as categorias disponíveis. Use SOMENTE quando o cliente pedir EXPLICITAMENTE o menu ou catálogo (ex: "quero ver o menu", "me mostre as opções", "catálogo", "menu"). NÃO use quando o cliente fizer perguntas gerais sobre a empresa (ex: "o que vocês fazem?", "quem são vocês?"). NUNCA use se o cliente apenas chamar pelo seu nome (ex: "Mobius") para voltar a falar com você.',
         parameters: { type: 'object', properties: {}, required: [] }
     },
     {
