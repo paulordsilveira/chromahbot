@@ -11,7 +11,7 @@
 
 import db from '../infrastructure/database';
 import aiService from '../infrastructure/AiService';
-import { TOOL_DEFINITIONS } from '../bot/modules/constants';
+import { TOOL_DEFINITIONS, SESSION_TIMEOUT } from '../bot/modules/constants';
 import { formatItemMessage } from '../bot/modules/menuNavigation';
 import { parseImageUrls, isSpecialSubcategory } from '../bot/modules/helpers';
 
@@ -27,6 +27,7 @@ interface SessionContext {
     categoryId: number | null;
     subcategoryId: number | null;
     subcategoryIndex: number | null;
+    lastWelcome?: number; // timestamp da última saudação
 }
 
 // ── Helper: texto do Menu Principal (igual ao menuNavigation.ts) ──
@@ -108,7 +109,7 @@ export async function handleAiTest(req: any, res: any) {
             if (config?.logoImage && config.logoImage.startsWith('data:image')) {
                 images.push(config.logoImage);
             }
-            ctx = { categoryId: null, subcategoryId: null, subcategoryIndex: null };
+            ctx = { categoryId: null, subcategoryId: null, subcategoryIndex: null, lastWelcome: Date.now() };
             return res.json({
                 responses: [{ type: 'text', content: text, images: images.length > 0 ? images : undefined }],
                 sessionContext: ctx
@@ -211,16 +212,22 @@ export async function handleAiTest(req: any, res: any) {
 
         // ── SAUDAÇÃO ──
         if (GREETING_RE.test(lower)) {
-            const config = db.prepare('SELECT welcomeMessage, logoImage FROM config WHERE id = 1').get() as any;
-            const text = config?.welcomeMessage || `Olá! Tudo bem? Em que posso te ajudar? 😊`;
-            const images: string[] = [];
-            if (config?.logoImage && config.logoImage.startsWith('data:image')) images.push(config.logoImage);
-            responseMessages.push({ type: 'text', content: text, images: images.length > 0 ? images : undefined });
+            const now = Date.now();
+            const lastWelcome = ctx.lastWelcome || 0;
+            if (now - lastWelcome > SESSION_TIMEOUT) {
+                ctx.lastWelcome = now;
+                const config = db.prepare('SELECT welcomeMessage, logoImage FROM config WHERE id = 1').get() as any;
+                const text = config?.welcomeMessage || `Olá! Tudo bem? Em que posso te ajudar? 😊`;
+                const images: string[] = [];
+                if (config?.logoImage && config.logoImage.startsWith('data:image')) images.push(config.logoImage);
+                responseMessages.push({ type: 'text', content: text, images: images.length > 0 ? images : undefined });
 
-            const menu = buildMainMenu();
-            responseMessages.push({ type: 'text', content: menu.text, images: menu.images.length > 0 ? menu.images : undefined });
-            ctx = { categoryId: null, subcategoryId: null, subcategoryIndex: null };
-            return res.json({ responses: responseMessages, sessionContext: ctx });
+                // O WhatsApp REAL não envia o menu imediatamente na saudação e não reseta o contexto.
+                // Apenas envia a saudação e aguarda a próxima interação do usuário.
+                return res.json({ responses: responseMessages, sessionContext: ctx });
+            }
+            // Se já enviou saudação recentemente (ex: usuário disse "Tudo bem" logo após o "oi"),
+            // ignora a saudação hardcoded e deixa a mensagem cair no fallback da IA (exatamente como no flow.ts).
         }
 
         // ── FALLBACK: IA COM FUNCTION CALLING ──
