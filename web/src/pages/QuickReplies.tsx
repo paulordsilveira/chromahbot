@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Zap, Plus, Edit2, Trash2, X, Save, Copy, CheckCircle } from 'lucide-react';
 
-const API_URL = 'http://localhost:3020/api';
+const API_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:3020'}/api`;
 
 interface QuickReply {
     id: number;

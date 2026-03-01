@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Calendar, Plus, Trash2, X, Save, Clock, Send } from 'lucide-react';
 
-const API_URL = 'http://localhost:3020/api';
+const API_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:3020'}/api`;
 
 interface ScheduledMessage {
     id: number;

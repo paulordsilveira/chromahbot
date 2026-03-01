@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { X, Bot, BrainCircuit, Cpu, Save, CheckCircle, Globe, MessageSquare, Phone, Key, RefreshCcw, Wand2, Bell } from 'lucide-react';
 
-const API_URL = 'http://localhost:3020/api';
+const API_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:3020'}/api`;
 
 type Config = {
   assistantName?: string;

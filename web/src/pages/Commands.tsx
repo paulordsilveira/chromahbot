@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Plus, X, Command, Trash2, Edit2, Save, Send, Search, Filter, Power, PowerOff, Clock, Eye, Download, Image as ImageIcon, FileText } from 'lucide-react';
 
-const API_URL = 'http://localhost:3020/api';
+const API_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:3020'}/api`;
 
 type CustomCommand = {
     id: number;

@@ -4,7 +4,7 @@ import { useSocket } from '../contexts/SocketContext';
 import { QRCodeCanvas } from 'qrcode.react';
 import { ShieldAlert, Zap, PowerOff, RefreshCw, Smartphone, Users } from 'lucide-react';
 
-const API_URL = 'http://localhost:3020/api';
+const API_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:3020'}/api`;
 
 export const Connection: React.FC = () => {
     const { botStatus, qrCode, botUser } = useSocket();
@@ -25,7 +25,7 @@ export const Connection: React.FC = () => {
         if (!window.confirm('Tem certeza que deseja desconectar o WhatsApp? O bot irá parar de responder a todos os clientes.')) {
             return;
         }
-        
+
         setLoading(true);
         try {
             await axios.post(API_URL + '/bot/disconnect');
@@ -48,7 +48,7 @@ export const Connection: React.FC = () => {
             </p>
 
             <div className="glass rounded-2xl p-6 md:p-8 border border-ch-border flex flex-col md:flex-row items-center gap-8 justify-between">
-                
+
                 <div className="flex-1 space-y-6">
                     <div>
                         <h2 className="text-xl font-bold text-ch-text">Status Atual</h2>
@@ -61,7 +61,7 @@ export const Connection: React.FC = () => {
                     </div>
 
                     {isConnected && botUser && (
-                         <div className="flex items-center gap-4 bg-ch-surface p-4 rounded-xl border border-ch-border max-w-md">
+                        <div className="flex items-center gap-4 bg-ch-surface p-4 rounded-xl border border-ch-border max-w-md">
                             {botUser.pic ? (
                                 <img src={botUser.pic} alt="Profile" className="w-14 h-14 rounded-full border border-ch-border shadow-md" />
                             ) : (
@@ -83,7 +83,7 @@ export const Connection: React.FC = () => {
                             </button>
                         ) : (
                             <button onClick={handleConnect} disabled={loading || botStatus === 'connecting'} className="flex items-center gap-2 px-6 py-3 gradient-btn text-ch-bg font-semibold rounded-xl transition-all shadow-lg hover:shadow-ch-cyan/20">
-                                <RefreshCw size={20} className={loading || botStatus === 'connecting' ? 'animate-spin' : ''} /> 
+                                <RefreshCw size={20} className={loading || botStatus === 'connecting' ? 'animate-spin' : ''} />
                                 {botStatus === 'connecting' ? 'Conectando...' : 'Gerar Novo QR'}
                             </button>
                         )}
@@ -98,7 +98,7 @@ export const Connection: React.FC = () => {
                                     <QRCodeCanvas value={qrCode} size={200} />
                                 </div>
                                 <p className="text-ch-muted text-sm text-center">
-                                    Escaneie com o <b>WhatsApp</b> <br/>(WhatsApp ▸ Aparelhos Conectados)
+                                    Escaneie com o <b>WhatsApp</b> <br />(WhatsApp ▸ Aparelhos Conectados)
                                 </p>
                             </>
                         ) : botStatus === 'connecting' ? (
@@ -107,7 +107,7 @@ export const Connection: React.FC = () => {
                                 <p className="text-ch-cyan font-medium animate-pulse">Solicitando QR Code...</p>
                             </div>
                         ) : (
-                             <div className="flex flex-col items-center gap-4 p-8 text-center text-ch-muted">
+                            <div className="flex flex-col items-center gap-4 p-8 text-center text-ch-muted">
                                 <ShieldAlert size={48} className="text-ch-surface-border mb-2 opacity-50" />
                                 <p>Sessão inativa.</p>
                                 <p className="text-xs">Clique em "Gerar Novo QR" para iniciar.</p>
@@ -116,7 +116,7 @@ export const Connection: React.FC = () => {
                     </div>
                 )}
             </div>
-            
+
             <div className="glass rounded-2xl p-6 border border-ch-border flex gap-4">
                 <Zap className="text-ch-purple shrink-0 mt-1" size={24} />
                 <div className="space-y-2">

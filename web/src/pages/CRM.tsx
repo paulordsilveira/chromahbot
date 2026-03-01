@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Eye, User, Phone, Mail, Calendar, LayoutGrid, List, X, Save, CheckCircle, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 
-const API_URL = 'http://localhost:3020/api';
+const API_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:3020'}/api`;
 
 const STATUS_OPTIONS = [
     { key: 'atendido', label: 'Atendido', color: 'bg-ch-cyan', emoji: '🔵' },

@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 
-const SOCKET_URL = 'http://localhost:3020';
+// URL do servidor — carregada das variáveis de ambiente do Vite
+const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:3020';
 
 interface SocketContextType {
     socket: Socket | null;

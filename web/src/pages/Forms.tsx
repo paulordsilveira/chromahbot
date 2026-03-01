@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Plus, Edit, Trash, Save, X, Upload, FileText, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 
-const API_URL = 'http://localhost:3020/api';
+const API_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:3020'}/api`;
 
 // Máscara de telefone
 const formatPhone = (value: string) => {
@@ -94,14 +94,14 @@ export const Forms: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [editingForm, setEditingForm] = useState<Partial<FormEntry> | null>(null);
     const [isNew, setIsNew] = useState(false);
-    
+
     // Estados para modal de arquivo
     const [showFileModal, setShowFileModal] = useState(false);
     const [fileTitle, setFileTitle] = useState('');
     const [fileData, setFileData] = useState<string | null>(null);
     const [fileType, setFileType] = useState('');
     const [fileError, setFileError] = useState<string | null>(null);
-    
+
     // Estados para modal de status
     const [showStatusModal, setShowStatusModal] = useState(false);
     const [newStatus, setNewStatus] = useState('');
@@ -204,7 +204,7 @@ export const Forms: React.FC = () => {
             setError('Falha ao salvar formulário.');
         }
     };
-    
+
     // Adicionar arquivo interno
     const handleAddFile = () => {
         if (!fileTitle.trim() || !fileData) {
@@ -212,18 +212,18 @@ export const Forms: React.FC = () => {
             return;
         }
         if (!editingForm) return;
-        
+
         const newFile: ArquivoInterno = { titulo: fileTitle, arquivo: fileData, tipo: fileType };
         const arquivos = [...(editingForm.arquivosInternos || []), newFile];
         setEditingForm({ ...editingForm, arquivosInternos: arquivos });
-        
+
         setShowFileModal(false);
         setFileTitle('');
         setFileData(null);
         setFileType('');
         setFileError(null);
     };
-    
+
     // Remover arquivo interno
     const handleRemoveFile = (idx: number) => {
         if (!editingForm) return;
@@ -231,7 +231,7 @@ export const Forms: React.FC = () => {
         arquivos.splice(idx, 1);
         setEditingForm({ ...editingForm, arquivosInternos: arquivos });
     };
-    
+
     // Abrir modal de mudança de status
     const openStatusModal = (status: string) => {
         setNewStatus(status);
@@ -241,7 +241,7 @@ export const Forms: React.FC = () => {
         setStatusError(null);
         setShowStatusModal(true);
     };
-    
+
     // Confirmar mudança de status
     const confirmStatusChange = () => {
         if (!editingForm) return;
@@ -388,11 +388,10 @@ export const Forms: React.FC = () => {
                                                 key={st.key}
                                                 type="button"
                                                 onClick={() => openStatusModal(st.key)}
-                                                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                                                    editingForm.statusAtual === st.key 
-                                                        ? `${st.color} text-white ring-2 ring-offset-2 ring-${st.color.replace('bg-', '')}` 
+                                                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${editingForm.statusAtual === st.key
+                                                        ? `${st.color} text-white ring-2 ring-offset-2 ring-${st.color.replace('bg-', '')}`
                                                         : 'bg-gray-200 bg-ch-surface-2 text-ch-text text-ch-text hover:bg-gray-300 hover:bg-ch-surface-2'
-                                                }`}
+                                                    }`}
                                             >
                                                 {editingForm.statusAtual === st.key && <CheckCircle size={12} className="inline mr-1" />}
                                                 {st.label}
@@ -436,11 +435,11 @@ export const Forms: React.FC = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-semibold text-ch-text dark:text-gray-100 mb-1">Contato <span className="text-ch-magenta">*</span></label>
-                                    <input 
-                                        type="text" 
-                                        value={editingForm.contato || ''} 
-                                        onChange={e => updateField('contato', formatPhone(e.target.value))} 
-                                        className="w-full border border-ch-border rounded-xl p-3 bg-ch-surface-2 text-ch-text" 
+                                    <input
+                                        type="text"
+                                        value={editingForm.contato || ''}
+                                        onChange={e => updateField('contato', formatPhone(e.target.value))}
+                                        className="w-full border border-ch-border rounded-xl p-3 bg-ch-surface-2 text-ch-text"
                                         placeholder="(00) 00000-0000"
                                         maxLength={15}
                                     />
@@ -553,18 +552,18 @@ export const Forms: React.FC = () => {
                             )}
                             <div>
                                 <label className="block text-sm font-semibold text-ch-text dark:text-gray-100 mb-1">Título do Arquivo</label>
-                                <input 
-                                    type="text" 
-                                    value={fileTitle} 
-                                    onChange={e => setFileTitle(e.target.value)} 
-                                    className="w-full border border-ch-border rounded-xl p-3 bg-ch-surface-2 text-ch-text" 
+                                <input
+                                    type="text"
+                                    value={fileTitle}
+                                    onChange={e => setFileTitle(e.target.value)}
+                                    className="w-full border border-ch-border rounded-xl p-3 bg-ch-surface-2 text-ch-text"
                                     placeholder="Ex: Comprovante de Renda"
                                 />
                             </div>
                             <div>
                                 <label className="block text-sm font-semibold text-ch-text dark:text-gray-100 mb-1">Selecionar Arquivo</label>
-                                <input 
-                                    type="file" 
+                                <input
+                                    type="file"
                                     onChange={(e) => {
                                         const file = e.target.files?.[0];
                                         if (file) {
@@ -611,26 +610,26 @@ export const Forms: React.FC = () => {
                             )}
                             <div>
                                 <label className="block text-sm font-semibold text-ch-text dark:text-gray-100 mb-1">Informações Adicionais <span className="text-ch-muted text-xs">(opcional)</span></label>
-                                <textarea 
-                                    value={statusInfo} 
-                                    onChange={e => setStatusInfo(e.target.value)} 
-                                    className="w-full border border-ch-border rounded-xl p-3 h-20 bg-ch-surface-2 text-ch-text" 
+                                <textarea
+                                    value={statusInfo}
+                                    onChange={e => setStatusInfo(e.target.value)}
+                                    className="w-full border border-ch-border rounded-xl p-3 h-20 bg-ch-surface-2 text-ch-text"
                                     placeholder="Observações internas..."
                                 />
                             </div>
                             <div>
                                 <label className="block text-sm font-semibold text-ch-text dark:text-gray-100 mb-1">Mensagem ao Cliente <span className="text-ch-muted text-xs">(opcional)</span></label>
-                                <textarea 
-                                    value={statusMensagem} 
-                                    onChange={e => setStatusMensagem(e.target.value)} 
-                                    className="w-full border border-ch-border rounded-xl p-3 h-20 bg-ch-surface-2 text-ch-text" 
+                                <textarea
+                                    value={statusMensagem}
+                                    onChange={e => setStatusMensagem(e.target.value)}
+                                    className="w-full border border-ch-border rounded-xl p-3 h-20 bg-ch-surface-2 text-ch-text"
                                     placeholder="Mensagem que será enviada ao cliente..."
                                 />
                             </div>
                             <div>
                                 <label className="block text-sm font-semibold text-ch-text dark:text-gray-100 mb-1">Anexo <span className="text-ch-muted text-xs">(opcional)</span></label>
-                                <input 
-                                    type="file" 
+                                <input
+                                    type="file"
                                     onChange={(e) => {
                                         const file = e.target.files?.[0];
                                         if (file) {

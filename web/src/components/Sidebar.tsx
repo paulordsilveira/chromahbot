@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, List, Settings, MessageSquare, FileText, Menu, X, Briefcase, Zap, Brain, Calendar, Send, Smartphone, Megaphone, Users } from 'lucide-react';
 import axios from 'axios';
 
-const API_URL = 'http://localhost:3020/api';
+const API_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:3020'}/api`;
 
 interface SidebarProps {
     isOpen: boolean;

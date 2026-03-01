@@ -6,7 +6,7 @@ import {
     Download, Search, Trash2, Clock, AlertTriangle, CalendarDays, MapPin, Edit3, HardDriveDownload
 } from 'lucide-react';
 
-const API_URL = 'http://localhost:3020/api/marketing';
+const API_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:3020'}/api/marketing`;
 
 // ─── Emojis populares para o Emoji Picker ───
 const EMOJI_LIST = [
