@@ -347,6 +347,9 @@ addColumnIfNotExists('config', 'outsideHoursMessage', "TEXT DEFAULT 'Obrigado pe
 // Migração: adicionar scheduledAt para campanhas agendadas
 addColumnIfNotExists('marketing_campaign', 'scheduledAt', 'TEXT');
 
+// ─── Owner: associa os dados ao admin ───
+addColumnIfNotExists('config', 'ownerId', 'TEXT'); // ID do usuário Better Auth que é dono dos dados
+
 const existingConfig = db.prepare('SELECT id FROM config WHERE id = 1').get();
 if (!existingConfig) {
   db.prepare(`INSERT INTO config (id, welcomeMessage, activeAiProvider) VALUES (1, 'Olá! Seja bem-vindo à ChromaH — soluções digitais conscientes. Como posso ajudar?', 'gemini')`).run();

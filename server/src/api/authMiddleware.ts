@@ -3,23 +3,27 @@
  * 
  * Responsabilidades:
  * 1. Verificar se o usuário está autenticado via sessão Better Auth
- * 2. Bloquear requisições não autenticadas com status 401
- * 3. Passar informações do usuário para as rotas protegidas
+ * 2. Verificar se o usuário é o owner (admin) dos dados
+ * 3. Bloquear acesso de não-owners com 403
+ * 4. Passar informações do usuário para as rotas protegidas
  * 
  * Uso: aplicado em todas as rotas /api/* exceto /api/auth/*
  */
 import { Request, Response, NextFunction } from 'express';
-import { auth } from '../infrastructure/auth';
+import { auth, isOwner, getOwnerId } from '../infrastructure/auth';
 import { fromNodeHeaders } from 'better-auth/node';
 
 /**
- * Middleware que verifica se a requisição possui uma sessão válida.
- * - Se autenticado: adiciona `req.user` e `req.session` e segue adiante
- * - Se não autenticado: retorna 401 Unauthorized
+ * Middleware que verifica:
+ * 1. Se o usuário tem sessão válida (autenticado)
+ * 2. Se o usuário é o owner/admin dos dados
+ * 
+ * Se não autenticado → 401
+ * Se autenticado mas não é owner → 403
  */
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
     try {
-        // Converte os headers do Node.js para formato compatível com Better Auth
+        // Verifica sessão Better Auth
         const session = await auth.api.getSession({
             headers: fromNodeHeaders(req.headers),
         });
@@ -28,6 +32,18 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
             res.status(401).json({
                 error: 'Não autenticado',
                 message: 'Você precisa estar logado para acessar este recurso.'
+            });
+            return;
+        }
+
+        // Verifica se é o owner (admin) dos dados
+        const ownerId = getOwnerId();
+
+        if (ownerId && !isOwner(session.user.id)) {
+            // Existe um owner, mas não é este usuário
+            res.status(403).json({
+                error: 'Acesso negado',
+                message: 'Apenas o administrador pode acessar este painel.'
             });
             return;
         }
