@@ -8,11 +8,13 @@
  * 4. Bridge entre EventBus interno e Socket.IO para o frontend
  * 5. Inicializar bot WhatsApp e marketing worker
  */
+import dotenv from 'dotenv';
+dotenv.config(); // Carregar .env ANTES de tudo
+
 import express from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import dotenv from 'dotenv';
 import { toNodeHandler } from 'better-auth/node';
 import { auth } from '../infrastructure/auth';
 import { requireAuth } from './authMiddleware';
@@ -20,9 +22,6 @@ import eventBus from '../infrastructure/EventBus';
 import routes from './routes';
 import '../bot/connection'; // Inicializa conexão com WhatsApp
 import '../bot/modules/marketingWorker'; // Inicializa worker de marketing
-
-// Carrega variáveis de ambiente do arquivo .env
-dotenv.config();
 
 const app = express();
 const httpServer = createServer(app);
@@ -45,14 +44,21 @@ const io = new Server(httpServer, {
 app.use(cors({
     origin: allowedOrigins,
     credentials: true, // Necessário para cookies de sessão Better Auth
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
+// ─── Rotas Better Auth (ANTES do body parser!) ───
+// Better Auth precisa ler o body raw, por isso deve ser montado antes do express.json()
+// Express 5 exige wildcards nomeados: {*splat} em vez de *
+const authHandler = toNodeHandler(auth);
+app.all('/api/auth/{*splat}', (req, res) => {
+    return authHandler(req, res);
+});
+
+// ─── Body parser (DEPOIS das rotas auth) ───
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
-
-// ─── Rotas Better Auth (públicas — login, registro, etc.) ───
-// IMPORTANTE: Montar ANTES do body parser para que Better Auth gerencie o proprio parsing
-app.all('/api/auth/*splat', toNodeHandler(auth));
 
 // ─── Rotas da API protegidas por autenticação ───
 app.use('/api', requireAuth, routes);
