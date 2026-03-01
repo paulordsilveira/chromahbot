@@ -21,3 +21,10 @@ alterar o botão em #root > div > div.flex-1.flex.flex-col.min-w-0 > main > div 
 Ao lado desse botão incluir o botão = Resumir com IA, que vai ler a conserva e ela vai ser resumida e guardada para caso seja recuperada, se caso seja necessário resumir novamente a ia não deve pegar do começo, ela deve pegar do resumo e continuar de forma histórica, isso deve ser mostrado em um modal 
 
 faça isso lendo as informações de Gemini.md e faça o plano
+
+
+editar template em marketing
+adicionar mecamina de teste de agendamento
+
+em leads e tickets as conversas tem ser acessada dentro do bloco do lead mesmo
+E juntas as interações, o momento toda nova sessão gera um lead novo, se for do mesmo numero não há necessidade 

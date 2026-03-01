@@ -14,6 +14,8 @@ import { QuickReplies } from './pages/QuickReplies';
 import { AiTraining } from './pages/AiTraining';
 import { ScheduledMessages } from './pages/ScheduledMessages';
 import { Connection } from './pages/Connection';
+import { Marketing } from './pages/Marketing';
+import { Clients } from './pages/Clients';
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -39,6 +41,8 @@ function App() {
                   <Route path="/respostas-rapidas" element={<QuickReplies />} />
                   <Route path="/treinamento-ia" element={<AiTraining />} />
                   <Route path="/agendamento" element={<ScheduledMessages />} />
+                  <Route path="/marketing" element={<Marketing />} />
+                  <Route path="/clientes" element={<Clients />} />
                 </Routes>
               </main>
             </div>

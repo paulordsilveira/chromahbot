@@ -16,6 +16,8 @@ const AUTH_FOLDER = path.resolve(__dirname, '../../auth_info');
 
 let currentSock: any = null;
 
+export const getSock = () => currentSock;
+
 export async function connectToWhatsApp() {
     // Limpar sock anterior para evitar listeners duplicados
     if (currentSock) {

@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import eventBus from '../infrastructure/EventBus';
 import routes from './routes';
 import '../bot/connection'; // Initialize bot connection logic
+import '../bot/modules/marketingWorker'; // Initialize marketing queue worker
 
 dotenv.config();
 

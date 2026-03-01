@@ -38,12 +38,29 @@ export const notifyOwner = async (sock: any, type: 'lead' | 'atendimento', conta
     }
 };
 
-// ─── Lead Ticket ───
+// ─── Lead Ticket (com deduplicação: não cria duplicata se já existe ticket aberto para o mesmo contato) ───
 export const createLeadTicket = (contactId: number, type: 'lead' | 'atendimento', summary?: string) => {
     try {
-        db.prepare('INSERT INTO lead_ticket (contactId, type, summary) VALUES (?, ?, ?)').run(contactId, type, summary || null);
+        // Verificar se já existe ticket aberto (não Finalizado/closed) para este contato
+        const existing = db.prepare(
+            "SELECT id, summary FROM lead_ticket WHERE contactId = ? AND status NOT IN ('Finalizado', 'closed') ORDER BY notifiedAt DESC LIMIT 1"
+        ).get(contactId) as any;
+
+        if (existing) {
+            // Ticket aberto já existe — atualizar summary com nova interação
+            const updatedSummary = existing.summary
+                ? `${existing.summary}\n---\n${summary || 'Nova interação'}`
+                : summary || 'Nova interação';
+            db.prepare('UPDATE lead_ticket SET summary = ?, notifiedAt = datetime(\'now\') WHERE id = ?')
+                .run(updatedSummary, existing.id);
+            console.log(`[LeadTicket] Interação adicionada ao ticket #${existing.id} (contactId: ${contactId})`);
+        } else {
+            // Nenhum ticket aberto — criar novo
+            db.prepare('INSERT INTO lead_ticket (contactId, type, summary) VALUES (?, ?, ?)').run(contactId, type, summary || null);
+            console.log(`[LeadTicket] Novo ticket criado para contactId: ${contactId}`);
+        }
     } catch (err) {
-        console.error('[LeadTicket] Erro ao criar ticket:', err);
+        console.error('[LeadTicket] Erro ao criar/atualizar ticket:', err);
     }
 };
 

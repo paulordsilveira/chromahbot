@@ -1,10 +1,14 @@
 ﻿import { Router } from 'express';
+import multer from 'multer';
+import os from 'os';
 import db from '../infrastructure/database';
+import Database from 'better-sqlite3';  // Para importação de .db externos
 import aiService from '../infrastructure/AiService';
 import { connectToWhatsApp, disconnectWhatsApp } from '../bot/connection';
 import { TOOL_DEFINITIONS } from '../bot/modules/constants';
 
 const router = Router();
+const uploadDb = multer({ dest: os.tmpdir() });
 
 router.get('/health', (_req, res) => {
   res.json({ ok: true });
@@ -389,13 +393,21 @@ router.delete('/forms/:id', (req, res) => {
 
 router.get('/lead-tickets', (_req, res) => {
   try {
+    // Busca tickets com dados do contato
     const tickets = db.prepare(`
       SELECT lt.*, c.name as contactName, c.phone as contactPhone, c.profilePicUrl, c.jid
       FROM lead_ticket lt
       JOIN contact c ON lt.contactId = c.id
       ORDER BY lt.notifiedAt DESC
     `).all() as any[];
-    res.json(tickets);
+    // Inclui as últimas 50 mensagens de cada contato para exibir no bloco do lead
+    const ticketsWithMessages = tickets.map((t: any) => {
+      const messages = db.prepare(
+        'SELECT id, content, role, timestamp FROM message_log WHERE contactId = ? ORDER BY timestamp DESC LIMIT 50'
+      ).all(t.contactId);
+      return { ...t, messages: messages.reverse() };
+    });
+    res.json(ticketsWithMessages);
   } catch (err) {
     console.error('GET /lead-tickets error:', err);
     res.status(500).json({ error: 'Failed to fetch lead tickets' });
@@ -1092,6 +1104,692 @@ router.get('/export/:type', (req, res) => {
     res.json(data);
   } catch (err: any) {
     console.error('GET /export error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// MARKETING ROUTES
+// ==========================================
+
+import fs from 'fs';
+import path from 'path';
+import { getSock } from '../bot/connection';
+import { delay } from '@whiskeysockets/baileys';
+import { sendItemWithImages } from '../bot/modules/menuNavigation';
+import { isSpecialSubcategory, userSubcategoryContext } from '../bot/modules/helpers';
+import { startForm } from '../bot/modules/formHandler';
+import { handleDuvidas, sendHumanContact } from '../bot/modules/specialActions';
+
+function formatPhoneNumber(phone: string): string | null {
+  if (!phone) return null;
+  let clean = phone.replace(/\D/g, '');
+  if (clean.length < 10) return null;
+  if (clean.length === 10) clean = `55${clean}`;
+  else if (clean.length === 11) clean = `55${clean}`;
+  else if (!clean.startsWith('55') && clean.length > 11) clean = `55${clean}`;
+  return `${clean}@s.whatsapp.net`;
+}
+
+// Upload Media
+router.post('/marketing/upload-media', (req, res) => {
+  try {
+    const { filename, base64 } = req.body;
+    if (!filename || !base64) return res.status(400).json({ error: 'Filename and base64 are required' });
+
+    const base64Data = base64.replace(/^data:([A-Za-z-+/]+);base64,/, '');
+    const ext = path.extname(filename) || '.bin';
+    const safeName = `camp_media_${Date.now()}${ext}`;
+
+    const uploadDir = path.resolve(__dirname, '../../uploads');
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+    const filePath = path.join(uploadDir, safeName);
+    fs.writeFileSync(filePath, base64Data, 'base64');
+
+    res.json({ success: true, path: filePath });
+  } catch (err: any) {
+    console.error('POST /marketing/upload-media error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Marketing Templates
+router.get('/marketing/templates', (_req, res) => {
+  try {
+    const templates = db.prepare('SELECT * FROM marketing_template ORDER BY id DESC').all();
+    res.json(templates);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/marketing/templates', (req, res) => {
+  try {
+    const { name, messageContent, imagePath } = req.body;
+    if (!name || !messageContent) return res.status(400).json({ error: 'Name and messageContent required' });
+
+    const stmt = db.prepare('INSERT INTO marketing_template (name, messageContent, imagePath) VALUES (?, ?, ?)');
+    const info = stmt.run(name, messageContent, imagePath || null);
+
+    res.json({ success: true, id: info.lastInsertRowid });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/marketing/templates/:id', (req, res) => {
+  try {
+    db.prepare('DELETE FROM marketing_template WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Atualizar template existente (edição)
+router.put('/marketing/templates/:id', (req, res) => {
+  try {
+    const { name, messageContent, imagePath } = req.body;
+    if (!name || !messageContent) return res.status(400).json({ error: 'Name and messageContent required' });
+    db.prepare('UPDATE marketing_template SET name = ?, messageContent = ?, imagePath = ? WHERE id = ?')
+      .run(name, messageContent, imagePath || null, req.params.id);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get Custom Commands (for Marketing insert)
+router.get('/marketing/commands', (_req, res) => {
+  try {
+    const commands = db.prepare('SELECT id, triggers FROM custom_command WHERE isActive = 1').all();
+    res.json(commands);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Test Marketing Message
+router.post('/marketing/test', async (req, res) => {
+  try {
+    const { phoneNumber, messageContent, imagePath } = req.body;
+    if (!phoneNumber || !messageContent) return res.status(400).json({ error: 'Phone and message required' });
+
+    const sock = getSock();
+    if (!sock) return res.status(500).json({ error: 'WhatsApp not connected' });
+
+    const jid = formatPhoneNumber(phoneNumber);
+    if (!jid) return res.status(400).json({ error: 'Invalid phone number format' });
+
+    let textParams = messageContent.replace(/\{\{nome\}\}/gi, 'Teste');
+
+    // === Processamento de Comandos Dinâmicos ===
+    const customCommands = db.prepare('SELECT * FROM custom_command WHERE isActive = 1').all() as any[];
+    let attachedFiles: any[] = [];
+    let linkedItemIds: number[] = [];
+    let linkedSubcatIds: number[] = [];
+
+    for (const cmd of customCommands) {
+      if (!cmd.triggers) continue;
+      const triggers = cmd.triggers.split(',').map((t: string) => t.trim());
+      let triggered = false;
+
+      for (const t of triggers) {
+        if (textParams.includes(t)) {
+          triggered = true;
+          if (cmd.textMessage) {
+            textParams = textParams.replace(t, cmd.textMessage);
+          } else {
+            textParams = textParams.replace(t, '');
+          }
+        }
+      }
+
+      if (triggered) {
+        if (cmd.fileData) {
+          try {
+            const files = JSON.parse(cmd.fileData);
+            attachedFiles.push(...files);
+          } catch (e) { }
+        }
+        if (cmd.linkedItemId) linkedItemIds.push(cmd.linkedItemId);
+        if (cmd.linkedSubcategoryId) linkedSubcatIds.push(cmd.linkedSubcategoryId);
+      }
+    }
+    textParams = textParams.trim();
+
+    const msgPayload: any = {};
+    if (imagePath && fs.existsSync(imagePath)) {
+      const ext = imagePath.split('.').pop()?.toLowerCase() || '';
+      if (['mp4', 'avi', 'mov'].includes(ext)) {
+        msgPayload.video = { url: imagePath };
+        msgPayload.caption = textParams;
+      } else if (['pdf', 'doc', 'docx', 'xls', 'xlsx'].includes(ext)) {
+        msgPayload.document = { url: imagePath };
+        msgPayload.fileName = imagePath.split(/[\/\\]/).pop() || 'Documento';
+        msgPayload.mimetype = ext === 'pdf' ? 'application/pdf' : 'application/octet-stream';
+        msgPayload.caption = textParams;
+      } else {
+        msgPayload.image = { url: imagePath };
+        msgPayload.caption = textParams;
+      }
+    } else if (textParams.length > 0) {
+      msgPayload.text = textParams;
+    }
+
+    if (Object.keys(msgPayload).length > 0) {
+      await sock.sendMessage(jid, msgPayload);
+      await delay(1000);
+    }
+
+    if (attachedFiles.length > 0) {
+      for (const file of attachedFiles) {
+        if (file.data) {
+          const matches = file.data.match(/^data:(.+);base64,(.*)$/);
+          if (matches && matches.length === 3) {
+            const mimetype = matches[1];
+            const buffer = Buffer.from(matches[2], 'base64');
+            await sock.sendMessage(jid, { document: buffer, mimetype, fileName: file.name });
+            await delay(1000);
+          }
+        }
+      }
+    }
+
+    const contactRecord = db.prepare('SELECT id FROM contact WHERE jid = ?').get(jid) as any;
+    const contactId = contactRecord ? contactRecord.id : null;
+
+    for (const itemId of linkedItemIds) {
+      const item = db.prepare('SELECT * FROM item WHERE id = ?').get(itemId) as any;
+      if (item) {
+        await sendItemWithImages(sock, jid, contactId, item);
+        await delay(1000);
+      }
+    }
+
+    for (const subId of linkedSubcatIds) {
+      const sub = db.prepare('SELECT * FROM subcategory WHERE id = ?').get(subId) as any;
+      if (sub) {
+        const cat = db.prepare('SELECT name FROM category WHERE id = ?').get(sub.categoryId) as any;
+        const specialType = isSpecialSubcategory(sub.name, cat?.name);
+        if (specialType === 'simulacao' || specialType === 'corretor' || specialType === 'processos' || specialType === 'locacao') {
+          await startForm(sock, jid, contactId, specialType);
+        } else if (specialType === 'duvidas') {
+          await handleDuvidas(sock, jid, contactId);
+        } else if (specialType === 'contato') {
+          await sendHumanContact(sock, jid, contactId);
+        } else {
+          const items = db.prepare('SELECT * FROM item WHERE subcategoryId = ? AND enabled = 1 ORDER BY id ASC').all(sub.id) as any[];
+          if (items.length > 0) {
+            const subcategories = db.prepare('SELECT id FROM subcategory WHERE categoryId = ? AND enabledInBot = 1 ORDER BY "order" ASC').all(sub.categoryId) as any[];
+            const realSubIdx = subcategories.findIndex((s: any) => s.id === sub.id) + 1;
+            userSubcategoryContext.set(jid, { categoryId: sub.categoryId, subcategoryIndex: realSubIdx });
+
+            let itemsText = `📂 *${sub.name}*\n\nEscolha um item:\n`;
+            items.forEach((item: any, idx: number) => itemsText += `*${idx + 1}* - ${item.name}\n`);
+            itemsText += `\nDigite *VOLTAR* para voltar.`;
+            await sock.sendMessage(jid, { text: itemsText });
+          } else {
+            await sock.sendMessage(jid, { text: `📂 *${sub.name}*\n\nNenhum item cadastrado nesta subcategoria.\n\nDigite *VOLTAR* para voltar.` });
+          }
+        }
+        await delay(1000);
+      }
+    }
+
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('POST /marketing/test error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Lista todos os leads de marketing (fonte unificada) ───
+router.get('/marketing/leads', (_req, res) => {
+  try {
+    const leads = db.prepare('SELECT * FROM marketing_lead ORDER BY id DESC').all();
+    res.json(leads);
+  } catch (err: any) {
+    console.error('GET /marketing/leads error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Upload CSV de leads de marketing (com novos campos) ───
+router.post('/marketing/csv-upload', (req, res) => {
+  try {
+    const { leads } = req.body; // Array de { name, phoneNumber, neighborhood, category, state, city, email, address, website }
+    if (!leads || !Array.isArray(leads)) {
+      return res.status(400).json({ error: 'Leads array is required' });
+    }
+
+    // Prepared statement com todos os campos disponíveis
+    const insertLead = db.prepare(
+      `INSERT OR IGNORE INTO marketing_lead (name, phoneNumber, source, neighborhood, category, state, city, email, address, website)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    let insertedCount = 0;
+
+    db.transaction(() => {
+      for (const lead of leads) {
+        const info = insertLead.run(
+          lead.name || null,
+          lead.phoneNumber,
+          'csv',
+          lead.neighborhood || null,
+          lead.category || null,
+          lead.state || null,
+          lead.city || null,
+          lead.email || null,
+          lead.address || null,
+          lead.website || null
+        );
+        if (info.changes > 0) insertedCount++;
+      }
+    })();
+
+    res.json({ success: true, inserted: insertedCount });
+  } catch (err: any) {
+    console.error('POST /marketing/csv-upload error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Importação de .db externo (scraper) → marketing_lead (importação estruturada) ───
+// Abre o banco externo em modo readonly, lê apenas as colunas relevantes
+// e insere na tabela marketing_lead do chromah.db
+router.post('/marketing/import-db', uploadDb.single('file'), (req, res) => {
+  try {
+    const dbFilePath = req.file?.path || req.body?.dbPath || path.resolve(__dirname, '../../../data/scraper.db');
+
+    // Verificar se o arquivo existe
+    if (!fs.existsSync(dbFilePath)) {
+      return res.status(400).json({ error: `Arquivo não encontrado: ${dbFilePath}` });
+    }
+
+    // Abrir banco externo em modo somente leitura
+    const externalDb = new Database(dbFilePath, { readonly: true });
+
+    // Buscar tabelas disponíveis para detectar a estrutura
+    const tables = externalDb.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[];
+    const tableNames = tables.map(t => t.name);
+
+    // Tentar encontrar a tabela de dados (establishments ou a primeira tabela com phone_number)
+    let targetTable = 'establishments';
+    if (!tableNames.includes(targetTable)) {
+      // Procurar qualquer tabela com coluna phone_number ou phoneNumber
+      for (const tn of tableNames) {
+        const cols = externalDb.prepare(`PRAGMA table_info(${tn})`).all() as { name: string }[];
+        if (cols.some(c => c.name === 'phone_number' || c.name === 'phoneNumber')) {
+          targetTable = tn;
+          break;
+        }
+      }
+    }
+
+    // Detectar colunas disponíveis na tabela alvo
+    const availableCols = externalDb.prepare(`PRAGMA table_info(${targetTable})`).all() as { name: string }[];
+    const colNames = availableCols.map(c => c.name);
+
+    // Construir SELECT com colunas que existem no banco externo
+    const colMapping: Record<string, string> = {
+      'title': 'name', 'name': 'name',
+      'phone_number': 'phoneNumber', 'phoneNumber': 'phoneNumber',
+      'category': 'category',
+      'state': 'state',
+      'city': 'city',
+      'neighborhood': 'neighborhood',
+      'email': 'email',
+      'address': 'address',
+      'website': 'website'
+    };
+
+    // Selecionar colunas que existem
+    const selectCols = Object.keys(colMapping).filter(c => colNames.includes(c));
+    if (selectCols.length === 0) {
+      externalDb.close();
+      return res.status(400).json({ error: 'Nenhuma coluna compatível encontrada no banco externo' });
+    }
+
+    // Buscar registros com telefone válido
+    const phoneCol = colNames.includes('phone_number') ? 'phone_number' : 'phoneNumber';
+    const rows = externalDb.prepare(
+      `SELECT ${selectCols.join(', ')} FROM ${targetTable} WHERE ${phoneCol} IS NOT NULL AND ${phoneCol} != ''`
+    ).all() as any[];
+
+    externalDb.close();
+
+    // Inserir na marketing_lead com normalização
+    const insertLead = db.prepare(
+      `INSERT OR IGNORE INTO marketing_lead (name, phoneNumber, source, neighborhood, category, state, city, email, address, website)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    let insertedCount = 0;
+
+    db.transaction(() => {
+      for (const row of rows) {
+        const info = insertLead.run(
+          row.title || row.name || null,
+          row.phone_number || row.phoneNumber,
+          'db_import',
+          row.neighborhood || null,
+          row.category || null,
+          row.state || null,
+          row.city || null,
+          row.email || null,
+          row.address || null,
+          row.website || null
+        );
+        if (info.changes > 0) insertedCount++;
+      }
+    })();
+
+    res.json({ success: true, inserted: insertedCount, total: rows.length });
+  } catch (err: any) {
+    console.error('POST /marketing/import-db error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Deletar lead de marketing ───
+router.delete('/marketing/leads/:id', (req, res) => {
+  try {
+    db.prepare('DELETE FROM marketing_lead WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get Campaigns
+router.get('/marketing/campaigns', (_req, res) => {
+  try {
+    const campaigns = db.prepare('SELECT * FROM marketing_campaign ORDER BY id DESC').all();
+    // For each campaign, attach the stats from the queue
+    const queueStats = db.prepare('SELECT campaignId, status, COUNT(*) as count FROM marketing_queue GROUP BY campaignId, status').all() as any[];
+
+    const enrichedCampaigns = campaigns.map((c: any) => {
+      const stats = queueStats.filter(s => s.campaignId === c.id);
+      const total = stats.reduce((acc, s) => acc + s.count, 0);
+      const sent = stats.find(s => s.status === 'sent')?.count || 0;
+      const failed = stats.find(s => s.status === 'failed')?.count || 0;
+      const pending = stats.find(s => s.status === 'pending')?.count || 0;
+
+      return { ...c, stats: { total, sent, failed, pending } };
+    });
+
+    res.json(enrichedCampaigns);
+  } catch (err: any) {
+    console.error('GET /marketing/campaigns error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create Campaign
+router.post('/marketing/campaigns', (req, res) => {
+  try {
+    const { name, messageContent, imagePath, minDelay, maxDelay, targetLeads, scheduledAt } = req.body;
+
+    if (!name || !messageContent || !targetLeads || !Array.isArray(targetLeads) || targetLeads.length === 0) {
+      return res.status(400).json({ error: 'Name, messageContent, and a non-empty targetLeads array are required' });
+    }
+
+    // Se tem agendamento, status inicia como 'scheduled'; senão 'paused' (manual)
+    const initialStatus = scheduledAt ? 'scheduled' : 'paused';
+
+    let campaignId: number | bigint = 0;
+    db.transaction(() => {
+      const result = db.prepare('INSERT INTO marketing_campaign (name, messageContent, imagePath, minDelay, maxDelay, status, scheduledAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(name, messageContent, imagePath || null, minDelay || 30, maxDelay || 90, initialStatus, scheduledAt || null);
+
+      campaignId = result.lastInsertRowid;
+
+      const insertQueue = db.prepare('INSERT INTO marketing_queue (campaignId, phoneNumber, contactName, status) VALUES (?, ?, ?, ?)');
+      for (const lead of targetLeads) {
+        insertQueue.run(campaignId, lead.phoneNumber, lead.name || null, 'pending');
+      }
+    })();
+
+    res.json({ success: true, campaignId: Number(campaignId) });
+  } catch (err: any) {
+    console.error('POST /marketing/campaigns error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update Campaign Status
+router.put('/marketing/campaigns/:id/status', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body; // 'paused', 'running', 'cancelled'
+
+    if (!['paused', 'running', 'cancelled'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+
+    db.prepare('UPDATE marketing_campaign SET status = ? WHERE id = ?').run(status, id);
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('PUT /marketing/campaigns/status error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Exportar dados da fila de uma campanha (para CSV no frontend) ───
+router.get('/marketing/campaigns/:id/queue', (req, res) => {
+  try {
+    const { id } = req.params;
+    const rows = db.prepare('SELECT * FROM marketing_queue WHERE campaignId = ? ORDER BY id').all(id);
+    res.json(rows);
+  } catch (err: any) {
+    console.error('GET /marketing/campaigns/:id/queue error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══ ROTAS DE AGENDAMENTOS MÚLTIPLOS ═══
+
+// Listar todos os agendamentos com dados do template vinculado
+router.get('/marketing/schedules', (_req, res) => {
+  try {
+    const schedules = db.prepare(`
+      SELECT s.*, t.name as templateName, t.messageContent, t.imagePath
+      FROM marketing_schedule s
+      LEFT JOIN marketing_template t ON s.templateId = t.id
+      ORDER BY s.scheduledDate ASC, s.scheduledTime ASC
+    `).all();
+    res.json(schedules);
+  } catch (err: any) {
+    console.error('GET /marketing/schedules error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Criar um novo agendamento baseado em template
+router.post('/marketing/schedules', (req, res) => {
+  try {
+    const { templateId, scheduledDate, scheduledTime, minDelay, maxDelay, targetFilters, selectedPhones } = req.body;
+    if (!templateId || !scheduledDate || !scheduledTime || !selectedPhones?.length) {
+      return res.status(400).json({ error: 'templateId, scheduledDate, scheduledTime e selectedPhones são obrigatórios' });
+    }
+    const result = db.prepare(
+      'INSERT INTO marketing_schedule (templateId, scheduledDate, scheduledTime, minDelay, maxDelay, targetFilters, selectedPhones, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(templateId, scheduledDate, scheduledTime, minDelay || 30, maxDelay || 90, JSON.stringify(targetFilters || {}), JSON.stringify(selectedPhones), 'pending');
+    res.json({ success: true, id: Number(result.lastInsertRowid) });
+  } catch (err: any) {
+    console.error('POST /marketing/schedules error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Excluir um agendamento
+router.delete('/marketing/schedules/:id', (req, res) => {
+  try {
+    db.prepare('DELETE FROM marketing_schedule WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('DELETE /marketing/schedules error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════
+// CLIENTES ROUTES (CRUD + Importação CSV / DB)
+// ══════════════════════════════════════════════════
+
+// ─── Lista todos os clientes ───
+router.get('/clients', (_req, res) => {
+  try {
+    const clients = db.prepare('SELECT * FROM client ORDER BY id DESC').all();
+    res.json(clients);
+  } catch (err: any) {
+    console.error('GET /clients error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Adicionar cliente manualmente ───
+router.post('/clients', (req, res) => {
+  try {
+    const { name, phoneNumber, category, state, city, neighborhood, email, address, website, notes } = req.body;
+    if (!phoneNumber) return res.status(400).json({ error: 'Telefone é obrigatório' });
+
+    const result = db.prepare(
+      `INSERT OR IGNORE INTO client (name, phoneNumber, source, category, state, city, neighborhood, email, address, website, notes)
+       VALUES (?, ?, 'manual', ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(name || null, phoneNumber, category || null, state || null, city || null, neighborhood || null, email || null, address || null, website || null, notes || null);
+
+    if (result.changes === 0) {
+      return res.status(409).json({ error: 'Cliente com este telefone já existe' });
+    }
+
+    const newClient = db.prepare('SELECT * FROM client WHERE id = ?').get(result.lastInsertRowid);
+    res.json(newClient);
+  } catch (err: any) {
+    console.error('POST /clients error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Editar cliente ───
+router.put('/clients/:id', (req, res) => {
+  try {
+    const { name, phoneNumber, category, state, city, neighborhood, email, address, website, notes } = req.body;
+    db.prepare(
+      `UPDATE client SET name=?, phoneNumber=?, category=?, state=?, city=?, neighborhood=?, email=?, address=?, website=?, notes=? WHERE id=?`
+    ).run(name || null, phoneNumber, category || null, state || null, city || null, neighborhood || null, email || null, address || null, website || null, notes || null, req.params.id);
+
+    const updated = db.prepare('SELECT * FROM client WHERE id = ?').get(req.params.id);
+    res.json(updated);
+  } catch (err: any) {
+    console.error('PUT /clients/:id error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Remover cliente ───
+router.delete('/clients/:id', (req, res) => {
+  try {
+    db.prepare('DELETE FROM client WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('DELETE /clients/:id error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Importar CSV → tabela client ───
+router.post('/clients/csv-upload', (req, res) => {
+  try {
+    const { leads } = req.body; // Array de { name, phoneNumber, category, state, city, neighborhood, email, address, website, notes }
+    if (!leads || !Array.isArray(leads)) {
+      return res.status(400).json({ error: 'Array de clientes é obrigatório' });
+    }
+
+    const insertClient = db.prepare(
+      `INSERT OR IGNORE INTO client (name, phoneNumber, source, category, state, city, neighborhood, email, address, website, notes)
+       VALUES (?, ?, 'csv', ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    let insertedCount = 0;
+
+    db.transaction(() => {
+      for (const c of leads) {
+        const info = insertClient.run(
+          c.name || null, c.phoneNumber, c.category || null,
+          c.state || null, c.city || null, c.neighborhood || null,
+          c.email || null, c.address || null, c.website || null, c.notes || null
+        );
+        if (info.changes > 0) insertedCount++;
+      }
+    })();
+
+    res.json({ success: true, inserted: insertedCount });
+  } catch (err: any) {
+    console.error('POST /clients/csv-upload error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Importar .db externo → tabela client (mesma lógica do marketing) ───
+router.post('/clients/import-db', uploadDb.single('file'), (req, res) => {
+  try {
+    const dbFilePath = req.file?.path || req.body?.dbPath || path.resolve(__dirname, '../../../data/scraper.db');
+
+    if (!fs.existsSync(dbFilePath)) {
+      return res.status(400).json({ error: `Arquivo não encontrado: ${dbFilePath}` });
+    }
+
+    const externalDb = new Database(dbFilePath, { readonly: true });
+
+    // Detectar tabela alvo
+    const tables = externalDb.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[];
+    let targetTable = 'establishments';
+    if (!tables.some(t => t.name === targetTable)) {
+      for (const t of tables) {
+        const cols = externalDb.prepare(`PRAGMA table_info(${t.name})`).all() as { name: string }[];
+        if (cols.some(c => c.name === 'phone_number' || c.name === 'phoneNumber')) {
+          targetTable = t.name;
+          break;
+        }
+      }
+    }
+
+    const availableCols = externalDb.prepare(`PRAGMA table_info(${targetTable})`).all() as { name: string }[];
+    const colNames = availableCols.map(c => c.name);
+    const phoneCol = colNames.includes('phone_number') ? 'phone_number' : 'phoneNumber';
+
+    const selectCols = ['title', 'name', 'phone_number', 'phoneNumber', 'category', 'state', 'city', 'neighborhood', 'email', 'address', 'website']
+      .filter(c => colNames.includes(c));
+
+    const rows = externalDb.prepare(
+      `SELECT ${selectCols.join(', ')} FROM ${targetTable} WHERE ${phoneCol} IS NOT NULL AND ${phoneCol} != ''`
+    ).all() as any[];
+
+    externalDb.close();
+
+    const insertClient = db.prepare(
+      `INSERT OR IGNORE INTO client (name, phoneNumber, source, category, state, city, neighborhood, email, address, website)
+       VALUES (?, ?, 'db_import', ?, ?, ?, ?, ?, ?, ?)`
+    );
+    let insertedCount = 0;
+
+    db.transaction(() => {
+      for (const row of rows) {
+        const info = insertClient.run(
+          row.title || row.name || null,
+          row.phone_number || row.phoneNumber,
+          row.category || null,
+          row.state || null, row.city || null, row.neighborhood || null,
+          row.email || null, row.address || null, row.website || null
+        );
+        if (info.changes > 0) insertedCount++;
+      }
+    })();
+
+    res.json({ success: true, inserted: insertedCount, total: rows.length });
+  } catch (err: any) {
+    console.error('POST /clients/import-db error:', err);
     res.status(500).json({ error: err.message });
   }
 });

@@ -238,12 +238,114 @@ db.exec(`
   );
 `);
 
+// ─── Marketing Module ───
+db.exec(`
+  CREATE TABLE IF NOT EXISTS marketing_campaign (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    messageContent TEXT NOT NULL,
+    imagePath TEXT,
+    minDelay INTEGER DEFAULT 30,
+    maxDelay INTEGER DEFAULT 90,
+    status TEXT DEFAULT 'paused', -- 'paused', 'running', 'scheduled', 'completed', 'cancelled'
+    scheduledAt TEXT, -- ISO date/time para agendamento (null = imediato)
+    createdAt TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS marketing_lead (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    phoneNumber TEXT NOT NULL UNIQUE,
+    source TEXT DEFAULT 'csv', -- 'csv', 'scraper'
+    neighborhood TEXT,
+    category TEXT,
+    createdAt TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS marketing_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaignId INTEGER NOT NULL,
+    phoneNumber TEXT NOT NULL,
+    contactName TEXT,
+    status TEXT DEFAULT 'pending', -- 'pending', 'sent', 'failed'
+    scheduledFor TEXT,
+    sentAt TEXT,
+    errorLog TEXT,
+    FOREIGN KEY (campaignId) REFERENCES marketing_campaign(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS marketing_template (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    messageContent TEXT NOT NULL,
+    imagePath TEXT,
+    createdAt TEXT DEFAULT (datetime('now'))
+  );
+
+  -- Tabela para agendamentos múltiplos baseados em templates
+  CREATE TABLE IF NOT EXISTS marketing_schedule (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    templateId INTEGER NOT NULL,
+    scheduledDate TEXT NOT NULL,
+    scheduledTime TEXT NOT NULL,
+    minDelay INTEGER DEFAULT 30,
+    maxDelay INTEGER DEFAULT 90,
+    targetFilters TEXT,
+    selectedPhones TEXT,
+    status TEXT DEFAULT 'pending',
+    campaignId INTEGER,
+    createdAt TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (templateId) REFERENCES marketing_template(id) ON DELETE CASCADE
+  );
+`);
+
+// ─── Migrações: Novas colunas em marketing_lead (importação estruturada) ───
+addColumnIfNotExists('marketing_lead', 'state', 'TEXT');       // Estado geográfico (ex: "SP")
+addColumnIfNotExists('marketing_lead', 'city', 'TEXT');        // Cidade (ex: "São Paulo")
+addColumnIfNotExists('marketing_lead', 'email', 'TEXT');       // E-mail de contato
+addColumnIfNotExists('marketing_lead', 'address', 'TEXT');     // Endereço completo
+addColumnIfNotExists('marketing_lead', 'website', 'TEXT');     // Website do lead
+
+// ─── Tabela de Clientes (mesma estrutura do marketing_lead, propósito diferente) ───
+db.exec(`
+  CREATE TABLE IF NOT EXISTS client (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    phoneNumber TEXT NOT NULL UNIQUE,
+    source TEXT DEFAULT 'manual',       -- 'manual', 'csv', 'db_import'
+    category TEXT,
+    state TEXT,
+    city TEXT,
+    neighborhood TEXT,
+    email TEXT,
+    address TEXT,
+    website TEXT,
+    notes TEXT,                          -- observações livres sobre o cliente
+    createdAt TEXT DEFAULT (datetime('now'))
+  );
+`);
+
+// ─── Índices para performance nos filtros geográficos ───
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_ml_state ON marketing_lead(state);
+  CREATE INDEX IF NOT EXISTS idx_ml_city ON marketing_lead(city);
+  CREATE INDEX IF NOT EXISTS idx_ml_neighborhood ON marketing_lead(neighborhood);
+  CREATE INDEX IF NOT EXISTS idx_ml_phone ON marketing_lead(phoneNumber);
+  CREATE INDEX IF NOT EXISTS idx_cl_state ON client(state);
+  CREATE INDEX IF NOT EXISTS idx_cl_city ON client(city);
+  CREATE INDEX IF NOT EXISTS idx_cl_neighborhood ON client(neighborhood);
+  CREATE INDEX IF NOT EXISTS idx_cl_phone ON client(phoneNumber);
+`);
+
 // ─── Business Hours ───
 addColumnIfNotExists('config', 'businessHoursEnabled', 'INTEGER DEFAULT 0');
 addColumnIfNotExists('config', 'businessHoursStart', "TEXT DEFAULT '09:00'");
 addColumnIfNotExists('config', 'businessHoursEnd', "TEXT DEFAULT '18:00'");
 addColumnIfNotExists('config', 'businessDays', "TEXT DEFAULT '1,2,3,4,5'");
 addColumnIfNotExists('config', 'outsideHoursMessage', "TEXT DEFAULT 'Obrigado pelo contato! Nosso horário de atendimento é de segunda a sexta, das 09:00 às 18:00. Sua mensagem será respondida no próximo dia útil.'");
+
+// Migração: adicionar scheduledAt para campanhas agendadas
+addColumnIfNotExists('marketing_campaign', 'scheduledAt', 'TEXT');
 
 const existingConfig = db.prepare('SELECT id FROM config WHERE id = 1').get();
 if (!existingConfig) {
